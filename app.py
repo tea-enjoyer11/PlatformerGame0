@@ -1,8 +1,10 @@
 #!/usr/bin/python3.4
 # Setup Python ----------------------------------------------- #
-from pygame.locals import *
+from typing import Sequence
+from enum import Enum, auto
 import pygame
 import sys
+from pygame import Vector2, Surface, Rect, Color
 
 # Setup pygame/window ---------------------------------------- #
 mainClock = pygame.time.Clock()
@@ -10,7 +12,25 @@ pygame.init()
 pygame.display.set_caption('rampy boi')
 screen = pygame.display.set_mode((500, 500), 0, 32)
 
-tile_size = 50
+
+class TileType(Enum):
+    TILE = auto()
+    RAMP_LEFT = auto()
+    RAMP_RIGHT = auto()
+
+
+class Tile:
+    def __init__(self, color: Color, pos: Vector2, tile_type: TileType = TileType.TILE) -> None:
+        self.color = color
+        self.pos = pos
+        self.type = tile_type
+
+
+class Ramp(Tile):
+    def __init__(self, color: Color, pos: Vector2, tile_type: TileType, elevation: float = 0.0) -> None:  # 0 = default = 45 grad; 0.5 = 22,5 (45/2) grad; 0.75 = 11,25 (45/4) grad
+        super().__init__(color, pos, tile_type)
+
+        self.elevation = elevation
 
 
 class tile():
@@ -20,7 +40,7 @@ class tile():
         self.ramp = ramp
 
 
-def collision_test(object_1, object_list):
+def collision_test(object_1: Rect, object_list: list[Rect]) -> list[Rect]:
     collision_list = []
     for obj in object_list:
         if obj.colliderect(object_1):
@@ -28,20 +48,23 @@ def collision_test(object_1, object_list):
     return collision_list
 
 
-def tile_rect(t):
-    return pygame.Rect(t.pos[0] * tile_size, t.pos[1] * tile_size, tile_size, tile_size)
+TILESIZE = 50
+
+
+def tile_rect(t: Tile) -> Rect:
+    return Rect(t.pos.x * TILESIZE, t.pos.y * TILESIZE, TILESIZE, TILESIZE)
 
 
 class player():
-    def __init__(self, pos):
+    def __init__(self, pos: Vector2):
         self.pos = pos
         self.color = (0, 0, 255)
-        self.rect = pygame.Rect(pos[0], pos[1], 25, 50)
+        self.rect = Rect(pos.x, pos.y, 25, 50)
         self.vertical_momentum = 0
 
-    def move(self, movement, tiles):
-        normal_tiles = [tile_rect(t) for t in tiles if not t.ramp]  # make list of all normal tile rects
-        ramps = [t for t in tiles if t.ramp]  # make list of all ramps
+    def move(self, movement: Sequence[float], tiles: list[tile]):
+        normal_tiles = [tile_rect(t) for t in tiles if t.type == TileType.TILE]  # make list of all normal tile rects
+        ramps: list[Ramp] = [t for t in tiles if t.type in [TileType.RAMP_LEFT, TileType.RAMP_RIGHT]]  # make list of all ramps
 
         # handle standard collisions
         collision_types = {'top': False, 'bottom': False, 'right': False, 'left': False}
@@ -76,16 +99,16 @@ class player():
                 rel_x = self.rect.x - hitbox.x
 
                 # get height at player's position based on type of ramp
-                if ramp.ramp == 1:
-                    pos_height = rel_x + self.rect.width  # go by player right edge on right ramps
-                elif ramp.ramp == 2:
-                    pos_height = tile_size - rel_x  # is already left edge by default
+                if ramp.type == TileType.RAMP_RIGHT:
+                    pos_height = (rel_x + self.rect.width) * (1 - ramp.elevation)  # go by player right edge on right ramps
+                elif ramp.type == TileType.RAMP_LEFT:
+                    pos_height = (TILESIZE - rel_x) * (1 - ramp.elevation)  # is already left edge by default
 
                 # add constraints
-                pos_height = min(pos_height, tile_size)
+                pos_height = min(pos_height, TILESIZE)
                 pos_height = max(pos_height, 0)
 
-                target_y = hitbox.y + tile_size - pos_height
+                target_y = hitbox.y + TILESIZE - pos_height
 
                 if self.rect.bottom > target_y:  # check if the player collided with the actual ramp
                     # adjust player height
@@ -99,11 +122,11 @@ class player():
 
 
 # generate test map
-tiles = [tile([3, 8], 'red', 1), tile([5, 8], 'red', 1), tile([6, 8], 'red'), tile([4, 6], 'red'), tile([4, 5], 'red', 2), tile([3, 5], 'red')]
+tiles: list[Ramp | Tile] = [Ramp('red', Vector2(3, 8), TileType.RAMP_RIGHT), Ramp('red', Vector2(5, 8), TileType.RAMP_RIGHT), Tile('red', Vector2(6, 8)), Tile('red', Vector2(4, 6)), Ramp('red', Vector2(4, 5), TileType.RAMP_LEFT), Tile('red', Vector2(3, 5))]
 for i in range(10):
-    tiles.append(tile([i, 9], 'red'))
+    tiles.append(Tile('red', Vector2(i, 9)))
 
-p = player([100, 300])
+p = player(Vector2(100, 300))
 
 right = False
 left = False
@@ -132,35 +155,72 @@ while True:
 
     # Tiles -------------------------------------------------- #
     for t in tiles:
-        color = (0, 0, 0)
-        if t.type == 'red':
-            color = (255, 0, 0)
-        if t.ramp == 0:
+        color = t.color
+        if t.type == TileType.TILE:
+            pass
             pygame.draw.rect(screen, color, tile_rect(t))
-        elif t.ramp == 1:
-            pygame.draw.polygon(screen, color, [[t.pos[0] * tile_size, (t.pos[1] + 1) * tile_size - 1], [(t.pos[0] + 1) * tile_size - 1, (t.pos[1] + 1) * tile_size - 1], [(t.pos[0] + 1) * tile_size - 1, t.pos[1] * tile_size]])
-        elif t.ramp == 2:
-            pygame.draw.polygon(screen, color, [[t.pos[0] * tile_size, (t.pos[1] + 1) * tile_size - 1], [(t.pos[0] + 1) * tile_size - 1, (t.pos[1] + 1) * tile_size - 1], [t.pos[0] * tile_size, t.pos[1] * tile_size]])
+        elif t.type == TileType.RAMP_RIGHT:
+            color = "yellow"
+
+            """
+                          p3
+                        / |
+                      /   |
+                    /     |
+                  /       |
+                /         |
+              /           |
+            p1 ---------- p2
+            """
+            elev = t.elevation
+            p1 = Vector2(t.pos.x * TILESIZE, (t.pos.y + 1) * TILESIZE)
+            p2 = Vector2((t.pos.x + 1) * TILESIZE, (t.pos.y + 1) * TILESIZE)
+            p3 = Vector2((t.pos.x + 1) * TILESIZE, (t.pos.y + elev) * TILESIZE)
+
+            pygame.draw.polygon(screen, color, [p1, p2, p3])
+
+            # pygame.draw.polygon(screen, color, [[t.pos.x * TILESIZE, (t.pos.y + 1) * TILESIZE - 1], [(t.pos.x + 1) * TILESIZE - 1, (t.pos.y + 1) * TILESIZE - 1], [(t.pos.x + 1) * TILESIZE - 1, t.pos.y * TILESIZE]])
+        elif t.type == TileType.RAMP_LEFT:
+            color = "yellow"
+
+            """
+            p3
+            | \
+            |   \
+            |     \
+            |       \
+            |         \
+            |           \
+            p1 ---------- p2
+            """
+            elev = t.elevation
+            p1 = Vector2(t.pos.x * TILESIZE, (t.pos.y + 1) * TILESIZE)
+            p2 = Vector2((t.pos.x + 1) * TILESIZE, (t.pos.y + 1) * TILESIZE)
+            p3 = Vector2(t.pos.x * TILESIZE, (t.pos.y + elev) * TILESIZE)
+
+            pygame.draw.polygon(screen, color, [p1, p2, p3])
+
+            # pygame.draw.polygon(screen, color, [[t.pos.x * TILESIZE, (t.pos.y + 1) * TILESIZE - 1], [(t.pos.x + 1) * TILESIZE - 1, (t.pos.y + 1) * TILESIZE - 1], [t.pos.x * TILESIZE, (t.pos.y) * TILESIZE]])
 
     # Buttons ------------------------------------------------ #
     for event in pygame.event.get():
-        if event.type == QUIT:
+        if event.type == pygame.QUIT:
             pygame.quit()
             sys.exit()
-        if event.type == KEYDOWN:
-            if event.key == K_ESCAPE:
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_ESCAPE:
                 pygame.quit()
                 sys.exit()
-            if event.key == K_RIGHT:
+            if event.key == pygame.K_d:
                 right = True
-            if event.key == K_LEFT:
+            if event.key == pygame.K_a:
                 left = True
-            if event.key == K_UP:
+            if event.key == pygame.K_SPACE:
                 p.vertical_momentum = -16
-        if event.type == KEYUP:
-            if event.key == K_RIGHT:
+        if event.type == pygame.KEYUP:
+            if event.key == pygame.K_d:
                 right = False
-            if event.key == K_LEFT:
+            if event.key == pygame.K_a:
                 left = False
 
     # Update ------------------------------------------------- #
