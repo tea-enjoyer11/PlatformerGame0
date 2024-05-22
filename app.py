@@ -6,7 +6,7 @@ from pygame import Vector2, Surface, Rect, Color
 
 mainClock = pygame.time.Clock()
 pygame.init()
-screen = pygame.display.set_mode((500, 500), 0, 32)
+screen = pygame.display.set_mode((800, 500), 0, 32)
 
 
 class TileType(Enum):
@@ -137,7 +137,8 @@ class player():
 
 # generate test map
 tiles: list[Ramp | Tile] = [Tile("red", Vector2(0, 0)), Ramp('red', Vector2(3, 8), TileType.RAMP_RIGHT), Ramp('red', Vector2(5, 8), TileType.RAMP_RIGHT), Tile('red', Vector2(6, 8)), Tile('red', Vector2(4, 6)), Ramp('red', Vector2(4, 5), TileType.RAMP_LEFT), Tile('red', Vector2(3, 5))]
-for i in range(10):
+tiles: list[Ramp | Tile] = [Ramp("red", Vector2(2, 8), TileType.RAMP_RIGHT), Ramp("red", Vector2(4, 8), TileType.RAMP_LEFT), Ramp("red", Vector2(6, 8), TileType.RAMP_RIGHT, 0.5), Ramp("red", Vector2(8, 8), TileType.RAMP_LEFT, 0.5), Ramp("red", Vector2(10, 8), TileType.RAMP_RIGHT, 1), Ramp("red", Vector2(12, 8), TileType.RAMP_LEFT, 1)]
+for i in range(16):
     tiles.append(Tile('red', Vector2(i, 9)))
 
 p = player(Vector2(100, 300))
