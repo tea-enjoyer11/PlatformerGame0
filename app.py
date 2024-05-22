@@ -1,15 +1,11 @@
-#!/usr/bin/python3.4
-# Setup Python ----------------------------------------------- #
 from typing import Sequence
 from enum import Enum, auto
 import pygame
 import sys
 from pygame import Vector2, Surface, Rect, Color
 
-# Setup pygame/window ---------------------------------------- #
 mainClock = pygame.time.Clock()
 pygame.init()
-pygame.display.set_caption('rampy boi')
 screen = pygame.display.set_mode((500, 500), 0, 32)
 
 
@@ -21,23 +17,18 @@ class TileType(Enum):
 
 class Tile:
     def __init__(self, color: Color, pos: Vector2, tile_type: TileType = TileType.TILE) -> None:
+        if not isinstance(pos, Vector2):
+            pos = Vector2(pos)
         self.color = color
         self.pos = pos
         self.type = tile_type
 
 
 class Ramp(Tile):
-    def __init__(self, color: Color, pos: Vector2, tile_type: TileType, elevation: float = 0.0) -> None:  # 0 = default = 45 grad; 0.5 = 22,5 (45/2) grad; 0.75 = 11,25 (45/4) grad
+    def __init__(self, color: Color, pos: Vector2, tile_type: TileType, elevation: float = 0) -> None:  # 0 = default = 45 grad; 0.5 = 22,5 (45/2) grad; 0.75 = 11,25 (45/4) grad
         super().__init__(color, pos, tile_type)
 
         self.elevation = elevation
-
-
-class tile():
-    def __init__(self, pos, tile_type, ramp=0):  # 0 = none, 1 = right, 2 = left
-        self.pos = pos
-        self.type = tile_type
-        self.ramp = ramp
 
 
 def collision_test(object_1: Rect, object_list: list[Rect]) -> list[Rect]:
@@ -51,8 +42,11 @@ def collision_test(object_1: Rect, object_list: list[Rect]) -> list[Rect]:
 TILESIZE = 50
 
 
-def tile_rect(t: Tile) -> Rect:
-    return Rect(t.pos.x * TILESIZE, t.pos.y * TILESIZE, TILESIZE, TILESIZE)
+def tile_rect(t: Tile | Ramp) -> Rect:
+    if isinstance(t, Ramp):
+        return Rect(t.pos.x * TILESIZE, (t.pos.y + t.elevation) * TILESIZE, TILESIZE, TILESIZE * (1 - t.elevation))
+    else:  # isinstance(t, Tile)
+        return Rect(t.pos.x * TILESIZE, t.pos.y * TILESIZE, TILESIZE, TILESIZE)
 
 
 class player():
@@ -62,7 +56,9 @@ class player():
         self.rect = Rect(pos.x, pos.y, 25, 50)
         self.vertical_momentum = 0
 
-    def move(self, movement: Sequence[float], tiles: list[tile]):
+        self.min_step_height = .5  # relativ zu TILESIZE
+
+    def move(self, movement: Sequence[float], tiles: list[Tile]):
         normal_tiles = [tile_rect(t) for t in tiles if t.type == TileType.TILE]  # make list of all normal tile rects
         ramps: list[Ramp] = [t for t in tiles if t.type in [TileType.RAMP_LEFT, TileType.RAMP_RIGHT]]  # make list of all ramps
 
@@ -94,18 +90,36 @@ class player():
         # handle ramps
         for ramp in ramps:
             hitbox = tile_rect(ramp)
-            if self.rect.colliderect(hitbox):  # check if player collided with the bounding box for the ramp
+            ramp_collision = self.rect.colliderect(hitbox)
+
+            # TODO: Check einbauen, wo wenn man von der Seite auf die Ramp läuft, wo eigentlich die Wand ist, dass der Spieler da an der Kante hängen bleibt. (später min stepp offset einbauen)
+
+            if ramp_collision:  # check if player collided with the bounding box for the ramp
                 # get player's position relative to the ramp on the x axis
                 rel_x = self.rect.x - hitbox.x
+                print(rel_x)
+
+                steppable = TILESIZE * (1 - ramp.elevation) <= TILESIZE * self.min_step_height
+                # print(TILESIZE * (1 - ramp.elevation), TILESIZE * self.min_step_height)
 
                 # get height at player's position based on type of ramp
                 if ramp.type == TileType.RAMP_RIGHT:
                     pos_height = (rel_x + self.rect.width) * (1 - ramp.elevation)  # go by player right edge on right ramps
+                    if movement[0] < 0 and (rel_x == TILESIZE - 5) and not steppable:  # - X ist der speed. Bei einem Speed von 5 geht - 1 nicht. FIX (swept shape? oder einen loop (for _ in range(speed): check...))
+                        pos_height = 0
+                        self.rect.left = hitbox.right
+                        collision_types['left'] = True
+                        self.pos[0] = self.rect.x
                 elif ramp.type == TileType.RAMP_LEFT:
                     pos_height = (TILESIZE - rel_x) * (1 - ramp.elevation)  # is already left edge by default
+                    if movement[0] > 0 and (rel_x <= 5) and not steppable:  # 5 wie oben
+                        pos_height = 0
+                        self.rect.right = hitbox.left
+                        collision_types["right"] = True
+                        self.pos[0] = self.rect.x
 
                 # add constraints
-                pos_height = min(pos_height, TILESIZE)
+                pos_height = min(pos_height, TILESIZE * (1 - ramp.elevation))
                 pos_height = max(pos_height, 0)
 
                 target_y = hitbox.y + TILESIZE - pos_height
@@ -122,7 +136,7 @@ class player():
 
 
 # generate test map
-tiles: list[Ramp | Tile] = [Ramp('red', Vector2(3, 8), TileType.RAMP_RIGHT), Ramp('red', Vector2(5, 8), TileType.RAMP_RIGHT), Tile('red', Vector2(6, 8)), Tile('red', Vector2(4, 6)), Ramp('red', Vector2(4, 5), TileType.RAMP_LEFT), Tile('red', Vector2(3, 5))]
+tiles: list[Ramp | Tile] = [Tile("red", Vector2(0, 0)), Ramp('red', Vector2(3, 8), TileType.RAMP_RIGHT), Ramp('red', Vector2(5, 8), TileType.RAMP_RIGHT), Tile('red', Vector2(6, 8)), Tile('red', Vector2(4, 6)), Ramp('red', Vector2(4, 5), TileType.RAMP_LEFT), Tile('red', Vector2(3, 5))]
 for i in range(10):
     tiles.append(Tile('red', Vector2(i, 9)))
 
@@ -179,9 +193,11 @@ while True:
 
             pygame.draw.polygon(screen, color, [p1, p2, p3])
 
+            pygame.draw.rect(screen, "white", tile_rect(t), 3)
+
             # pygame.draw.polygon(screen, color, [[t.pos.x * TILESIZE, (t.pos.y + 1) * TILESIZE - 1], [(t.pos.x + 1) * TILESIZE - 1, (t.pos.y + 1) * TILESIZE - 1], [(t.pos.x + 1) * TILESIZE - 1, t.pos.y * TILESIZE]])
         elif t.type == TileType.RAMP_LEFT:
-            color = "yellow"
+            color = "green"
 
             """
             p3
@@ -195,10 +211,12 @@ while True:
             """
             elev = t.elevation
             p1 = Vector2(t.pos.x * TILESIZE, (t.pos.y + 1) * TILESIZE)
-            p2 = Vector2((t.pos.x + 1) * TILESIZE, (t.pos.y + 1) * TILESIZE)
+            p2 = Vector2((t.pos.x + 1) * TILESIZE - 1, (t.pos.y + 1) * TILESIZE)  # -1 kann man eigentlich weglasse, nur mit siehts schöner aus. Irgendwie ist das ein bisschen länger als TILESIZE
             p3 = Vector2(t.pos.x * TILESIZE, (t.pos.y + elev) * TILESIZE)
 
             pygame.draw.polygon(screen, color, [p1, p2, p3])
+
+            pygame.draw.rect(screen, "white", tile_rect(t), 3)
 
             # pygame.draw.polygon(screen, color, [[t.pos.x * TILESIZE, (t.pos.y + 1) * TILESIZE - 1], [(t.pos.x + 1) * TILESIZE - 1, (t.pos.y + 1) * TILESIZE - 1], [t.pos.x * TILESIZE, (t.pos.y) * TILESIZE]])
 
