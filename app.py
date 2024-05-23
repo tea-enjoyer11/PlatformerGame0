@@ -75,14 +75,21 @@ class Player():
         self.rect = Rect(pos.x, pos.y, 25, 50)
         self.vertical_momentum = 0
 
-        self.min_step_height = 1  # in TILESIZE Größe gerechnet
+        self.min_step_height = .5  # in TILESIZE Größe gerechnet
 
         self._last_pos = Vector2(0)
 
         self._collision_types = {'top': False, 'bottom': False, 'right': False, 'left': False}
         self._last_collision_types = {'top': False, 'bottom': False, 'right': False, 'left': False}
 
-    def move(self, movement: Sequence[float], tiles: list[Tile]):
+    def _is_steppable(self, tile: Rect):
+        top_point = tile.y - tile.height
+        return top_point - self.pos.y <= self.min_step_height * TILESIZE and self._last_collision_types["bottom"]
+
+    def _is_steppable_ramp(self, ramp: Ramp):
+        return TILESIZE * ramp.elevation <= self.min_step_height * TILESIZE
+
+    def move(self, movement: Sequence[float], tiles: list[Tile], dt: float):
         self._last_pos = self.pos.copy()
         self._last_collision_types = self._collision_types.copy()
         normal_tiles = [tile_rect(t) for t in tiles if t.type == TileType.TILE]  # make list of all normal tile rects
@@ -90,28 +97,27 @@ class Player():
 
         # handle standard collisions
         collision_types = {'top': False, 'bottom': False, 'right': False, 'left': False}
-        self.pos[0] += movement[0]
+        self.pos[0] += movement[0] * dt
         self.rect.x = int(self.pos[0])
         tile_hit_list = collision_test(self.rect, normal_tiles)
         for t in tile_hit_list:
             top_point = t.y - t.height
-            steppable = top_point - (self.pos.y) <= self.min_step_height * TILESIZE
             if movement[0] > 0:
                 self.rect.right = t.left
                 collision_types['right'] = True
-                if steppable is True and self._last_collision_types["bottom"] is True:
+                if self._is_steppable(t):
                     self.rect.bottom = t.top
                     collision_types['bottom'] = True
                     self.pos[1] = self.rect.y - 1  # kleiner offset, damit der Spieler nicht an der Kante stecken bleibt
             elif movement[0] < 0:
                 self.rect.left = t.right
                 collision_types['left'] = True
-                if steppable and self._last_collision_types["bottom"]:
+                if self._is_steppable(t):
                     self.rect.bottom = t.top
                     collision_types['bottom'] = True
                     self.pos[1] = self.rect.y - 1  # kleiner offset, damit der Spieler nicht an der Kante stecken bleibt
             self.pos[0] = self.rect.x
-        self.pos[1] += movement[1]
+        self.pos[1] += movement[1] * dt
         self.rect.y = int(self.pos[1])
         tile_hit_list = collision_test(self.rect, normal_tiles)
         for t in tile_hit_list:
@@ -136,7 +142,7 @@ class Player():
                 max_ramp_height = TILESIZE * ramp.elevation
                 ramp_height = 0  # eine Art offset height
 
-                steppable = TILESIZE * ramp.elevation <= self.min_step_height * TILESIZE
+                steppable = self._is_steppable_ramp(ramp)
 
                 border_collision_threshold = 5
                 if ramp.type == TileType.RAMP_RIGHT:
@@ -192,17 +198,20 @@ p = Player(Vector2(100, 300))
 
 right = False
 left = False
-speed = 5
-
+speed = 200
+dt_multiplicator = 1.0
 # Loop ------------------------------------------------------- #
 while True:
+    dt = mainClock.tick(0) * 0.001
+    dt *= dt_multiplicator
 
     # Background --------------------------------------------- #
     screen.fill((0, 0, 0))
 
     # Player ------------------------------------------------- #
-    p.vertical_momentum += 1
-    p.vertical_momentum = min(p.vertical_momentum, 15)
+    max_gravity = 1200
+    p.vertical_momentum += 700 * dt
+    p.vertical_momentum = min(p.vertical_momentum, max_gravity)
     player_movement = [0, p.vertical_momentum]
 
     if right:
@@ -210,7 +219,7 @@ while True:
     if left:
         player_movement[0] -= speed
 
-    collisions = p.move(player_movement, tiles)
+    collisions = p.move(player_movement, tiles, dt)
     if (collisions['bottom']) or (collisions['top']):
         p.vertical_momentum = 0
 
@@ -265,10 +274,14 @@ while True:
     cols = font.render(f"{collisions}", True, "white")
     lcols = font.render(f"{p._last_collision_types}", True, "white")
     s = collisions == p._last_collision_types
-    cols_same = font.render(f"{s}", True, "white")
+    cols_same = font.render(f"Are the last and current collisions the same: {s}", True, "white")
+    fps_surf = font.render(f"{mainClock.get_fps():.0f}", True, "white")
+    dt_surf = font.render(f"DT:{dt:.4f} DT multiplier:{dt_multiplicator:.4f}", True, "white")
     screen.blit(cols, (0, 0))
     screen.blit(lcols, (0, 20))
     screen.blit(cols_same, (0, 40))
+    screen.blit(fps_surf, (600, 0))
+    screen.blit(dt_surf, (0, 80))
 
     # Buttons ------------------------------------------------ #
     for event in pygame.event.get():
@@ -284,9 +297,13 @@ while True:
             if event.key == pygame.K_a:
                 left = True
             if event.key == pygame.K_SPACE:
-                p.vertical_momentum = -16
+                p.vertical_momentum = -350
             if event.key == pygame.K_TAB:
-                speed = 5 if speed == 1 else 1
+                speed = 200 if speed == 200 else 100
+            if event.key == pygame.K_UP:
+                dt_multiplicator = min(5, dt_multiplicator + 0.5)
+            if event.key == pygame.K_DOWN:
+                dt_multiplicator = max(0, dt_multiplicator - 0.5)
         if event.type == pygame.KEYUP:
             if event.key == pygame.K_d:
                 right = False
@@ -295,4 +312,3 @@ while True:
 
     # Update ------------------------------------------------- #
     pygame.display.update()
-    mainClock.tick(60)

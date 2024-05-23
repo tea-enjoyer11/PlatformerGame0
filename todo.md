@@ -1,3 +1,13 @@
+# Time
+
+**delta time**
+
+`dt = clock.get_fps(FPS) * 0.001`
+
+**global timescale**
+
+delta time mit irgendwas verkleinern / vergrößern BEVOR es weiter benutzt wird
+
 # Slopes
 
 **Kantige Slopes**
