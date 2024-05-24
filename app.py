@@ -3,11 +3,13 @@ from enum import Enum, auto
 import pygame
 import sys
 from pygame import Vector2, Surface, Rect, Color
+import pygame_gui
+import pygame_gui.ui_manager
 
 mainClock = pygame.time.Clock()
 pygame.init()
 pygame.font.init()
-screen = pygame.display.set_mode((800, 500), 0, 32)
+screen = pygame.display.set_mode((800, 600), 0, 32)
 font = pygame.font.SysFont("arial", 21)
 
 
@@ -194,12 +196,47 @@ tiles: list[Ramp | Tile] = [Tile("red", Vector2(0, 0)), Ramp('red', Vector2(3, 8
 for i in range(16):
     tiles.append(Tile('red', Vector2(i, 9)))
 
-p = Player(Vector2(100, 300))
+p = Player(Vector2(200, 500))
 
 right = False
 left = False
 speed = 200
-dt_multiplicator = 1.0
+dt_multiplicator = 0
+gravity = 2500
+max_gravity = 1000
+jumpforce = 700
+pygame_gui_manager = pygame_gui.ui_manager.UIManager((800, 600))
+
+gravity_slider = pygame_gui.elements.UIHorizontalSlider(relative_rect=pygame.Rect(210, 500, 500, 30),
+                                                        start_value=gravity,
+                                                        value_range=(100, 2500),
+                                                        manager=pygame_gui_manager)
+gravity_textbox = pygame_gui.elements.ui_text_entry_box.UITextEntryBox(pygame.Rect(110, 500, 90, 30),
+                                                                       f"{gravity}",
+                                                                       manager=pygame_gui_manager)
+gravity_lbl = pygame_gui.elements.ui_label.UILabel(pygame.Rect(10, 500, 90, 30),
+                                                   "Gravity",
+                                                   pygame_gui_manager)
+max_gravity_slider = pygame_gui.elements.UIHorizontalSlider(relative_rect=pygame.Rect(210, 530, 500, 30),
+                                                            start_value=50,
+                                                            value_range=(100, 2500),
+                                                            manager=pygame_gui_manager)
+max_gravity_lbl = pygame_gui.elements.ui_label.UILabel(pygame.Rect(10, 530, 90, 30),
+                                                       "Max. Gravity",
+                                                       pygame_gui_manager)
+max_gravity_textbox = pygame_gui.elements.ui_text_entry_box.UITextEntryBox(pygame.Rect(110, 530, 90, 30),
+                                                                           f"{max_gravity}",
+                                                                           manager=pygame_gui_manager)
+jumpforce_slider = pygame_gui.elements.UIHorizontalSlider(relative_rect=pygame.Rect(210, 560, 500, 30),
+                                                          start_value=jumpforce,
+                                                          value_range=(100, 2500),
+                                                          manager=pygame_gui_manager)
+jumpforce_textbox = pygame_gui.elements.ui_text_entry_box.UITextEntryBox(pygame.Rect(110, 560, 90, 30),
+                                                                         f"{jumpforce}",
+                                                                         manager=pygame_gui_manager)
+jumpforce_lbl = pygame_gui.elements.ui_label.UILabel(pygame.Rect(10, 560, 90, 30),
+                                                     "Jumpforce",
+                                                     pygame_gui_manager)
 # Loop ------------------------------------------------------- #
 while True:
     dt = mainClock.tick(0) * 0.001
@@ -209,8 +246,7 @@ while True:
     screen.fill((0, 0, 0))
 
     # Player ------------------------------------------------- #
-    max_gravity = 1200
-    p.vertical_momentum += 700 * dt
+    p.vertical_momentum += gravity * dt
     p.vertical_momentum = min(p.vertical_momentum, max_gravity)
     player_movement = [0, p.vertical_momentum]
 
@@ -277,11 +313,13 @@ while True:
     cols_same = font.render(f"Are the last and current collisions the same: {s}", True, "white")
     fps_surf = font.render(f"{mainClock.get_fps():.0f}", True, "white")
     dt_surf = font.render(f"DT:{dt:.4f} DT multiplier:{dt_multiplicator:.4f}", True, "white")
+    playerinfo_surf = font.render(f"POS:{p.pos}", True, "white")
     screen.blit(cols, (0, 0))
     screen.blit(lcols, (0, 20))
     screen.blit(cols_same, (0, 40))
-    screen.blit(fps_surf, (600, 0))
     screen.blit(dt_surf, (0, 80))
+    screen.blit(fps_surf, (600, 0))
+    screen.blit(playerinfo_surf, (600, 50))
 
     # Buttons ------------------------------------------------ #
     for event in pygame.event.get():
@@ -297,18 +335,69 @@ while True:
             if event.key == pygame.K_a:
                 left = True
             if event.key == pygame.K_SPACE:
-                p.vertical_momentum = -350
+                p.vertical_momentum = -jumpforce
             if event.key == pygame.K_TAB:
                 speed = 200 if speed == 200 else 100
             if event.key == pygame.K_UP:
                 dt_multiplicator = min(5, dt_multiplicator + 0.5)
             if event.key == pygame.K_DOWN:
                 dt_multiplicator = max(0, dt_multiplicator - 0.5)
+            if event.key == pygame.K_r:
+                p.pos = Vector2(200, 50)
+                p.vertical_momentum = 0
         if event.type == pygame.KEYUP:
             if event.key == pygame.K_d:
                 right = False
             if event.key == pygame.K_a:
                 left = False
+
+        if event.type == pygame_gui.UI_HORIZONTAL_SLIDER_MOVED:
+            if event.ui_element == gravity_slider:
+                print('current slider value:', event.value)
+                gravity_textbox.set_text(str(event.value))
+                gravity = event.value
+            elif event.ui_element == max_gravity_slider:
+                print('current slider value:', event.value)
+                max_gravity_textbox.set_text(str(event.value))
+                max_gravity = event.value
+            elif event.ui_element == jumpforce_slider:
+                print('current slider value:', event.value)
+                jumpforce_textbox.set_text(str(event.value))
+                jumpforce = event.value
+
+        if event.type == pygame_gui.UI_TEXT_ENTRY_CHANGED:
+            if event.ui_element == gravity_textbox:
+                print("Changed text:", event.text)
+                val = gravity_slider.get_current_value()
+                try:
+                    val = max(100, min(int(event.text), 1000))
+                except ValueError:
+                    print(f"Converting error: {event.text=}")
+                gravity_slider.set_current_value(val)
+                gravity = val
+            elif event.ui_element == max_gravity_textbox:
+                print("Changed text:", event.text)
+                val = max_gravity_slider.get_current_value()
+                try:
+                    val = max(100, min(int(event.text), 1000))
+                except ValueError:
+                    print(f"Converting error: {event.text=}")
+                max_gravity_slider.set_current_value(val)
+                max_gravity = val
+            elif event.ui_element == jumpforce_textbox:
+                print("Changed text:", event.text)
+                val = jumpforce_slider.get_current_value()
+                try:
+                    val = int(event.text)
+                except ValueError:
+                    print(f"Converting error: {event.text=}")
+                jumpforce_slider.set_current_value(val)
+                jumpforce = val
+
+        pygame_gui_manager.process_events(event)
+
+    pygame_gui_manager.update(dt)
+    pygame_gui_manager.draw_ui(screen)
 
     # Update ------------------------------------------------- #
     pygame.display.update()
