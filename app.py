@@ -86,7 +86,7 @@ class Player():
 
     def _is_steppable(self, tile: Rect):
         top_point = tile.y - tile.height
-        return top_point - self.pos.y <= self.min_step_height * TILESIZE and self._last_collision_types["bottom"]
+        return top_point - self.pos.y <= self.min_step_height * TILESIZE and self._last_collision_types["bottom"] and (self._last_collision_types["right"] or self._last_collision_types["left"])
 
     def _is_steppable_ramp(self, ramp: Ramp):
         return TILESIZE * ramp.elevation <= self.min_step_height * TILESIZE
@@ -103,22 +103,17 @@ class Player():
         self.rect.x = int(self.pos[0])
         tile_hit_list = collision_test(self.rect, normal_tiles)
         for t in tile_hit_list:
-            top_point = t.y - t.height
             if movement[0] > 0:
                 self.rect.right = t.left
                 collision_types['right'] = True
-                if self._is_steppable(t):
-                    self.rect.bottom = t.top
-                    collision_types['bottom'] = True
-                    self.pos[1] = self.rect.y - 1  # kleiner offset, damit der Spieler nicht an der Kante stecken bleibt
             elif movement[0] < 0:
                 self.rect.left = t.right
                 collision_types['left'] = True
-                if self._is_steppable(t):
-                    self.rect.bottom = t.top
-                    collision_types['bottom'] = True
-                    self.pos[1] = self.rect.y - 1  # kleiner offset, damit der Spieler nicht an der Kante stecken bleibt
             self.pos[0] = self.rect.x
+            if self._is_steppable(t):  # das funktioniert nur wenn man an der linken kannte des spielers steht, dann auch nur bis dtmultiplier 2.5, ab 3.0 gehts net mehr TODO: FIXEN
+                self.rect.bottom = t.top
+                collision_types['bottom'] = True
+                self.pos[1] = self.rect.y - 1  # kleiner offset, damit der Spieler nicht an der Kante stecken bleibt
         self.pos[1] += movement[1] * dt
         self.rect.y = int(self.pos[1])
         tile_hit_list = collision_test(self.rect, normal_tiles)
@@ -201,7 +196,7 @@ p = Player(Vector2(200, 500))
 right = False
 left = False
 speed = 200
-dt_multiplicator = 0
+dt_multiplicator = 1
 gravity = 2500
 max_gravity = 1000
 jumpforce = 700
