@@ -12,6 +12,17 @@ pygame.font.init()
 screen = pygame.display.set_mode((800, 600), 0, 32)
 font = pygame.font.SysFont("arial", 21)
 
+TILESIZE = 32
+
+
+def load_image(path: str) -> Surface:
+    i = pygame.image.load(path).convert()
+    i.set_colorkey("black")
+    return i
+
+
+IMGS = [load_image("assets/tile.png"), load_image("assets/ramp_left.png"), load_image("assets/ramp_right.png")]
+
 
 class TileType(Enum):
     TILE = auto()
@@ -27,12 +38,62 @@ class Tile:
         self.pos = pos
         self.type = tile_type
 
+        self.img_idx = 0
+
 
 class Ramp(Tile):
     def __init__(self, color: Color, pos: Vector2, tile_type: TileType, elevation: float = 1) -> None:  # angegeben in wie TILESIZE einheit
         super().__init__(color, pos, tile_type)
 
         self.elevation = elevation
+
+        if self.type == TileType.RAMP_LEFT:
+            self.img_idx = 1
+        else:
+            self.img_idx = 2
+
+
+# class Chunk:
+#     def __init__(self, pos: Vector2, size: Vector2 = Vector2(16, 16)) -> None:
+#         self.pos = pos
+#         self.size = size
+
+#     def pre_render(self):
+#         ...
+
+#     def get_pre_render(self):
+#         ...
+
+def props(cls):
+    return [i for i in cls.__dict__.keys() if i[:1] != '_']
+
+
+class TileMap:
+    def __init__(self) -> None:
+        self._tiles: dict[tuple, Tile] = {}
+
+    def add(self, tiles: Tile) -> None:
+        for t in tiles:
+            self._tiles[tuple(t.pos)] = t
+
+    def get(self, pos: tuple) -> Tile:
+        if not isinstance(pos, tuple):
+            try:
+                pos = tuple(pos)
+            except ValueError:
+                print('Value Error in pos conversion. "{pos}" could not be converted to a tuple.')
+                pos = None
+        if pos in self._tiles:
+            return self._tiles[pos]
+
+    def get_all(self) -> list[Tile]:
+        return list(self._tiles.values())
+
+    def render(self, surf: Surface) -> None:
+        l = []
+        for pos, tile in self._tiles.items():
+            l.append((IMGS[tile.img_idx], (pos[0] * TILESIZE, pos[1] * TILESIZE)))
+        surf.fblits(l)
 
 
 def collision_test(object_1: Rect, object_list: list[Rect]) -> list[Rect]:
@@ -41,9 +102,6 @@ def collision_test(object_1: Rect, object_list: list[Rect]) -> list[Rect]:
         if obj.colliderect(object_1):
             collision_list.append(obj)
     return collision_list
-
-
-TILESIZE = 50
 
 
 def tile_rect(t: Tile | Ramp) -> Rect:
@@ -74,7 +132,7 @@ class Player():
     def __init__(self, pos: Vector2):
         self.pos = pos
         self.color = (0, 0, 255)
-        self.rect = Rect(pos.x, pos.y, 25, 50)
+        self.rect = Rect(pos.x, pos.y, TILESIZE // 2, TILESIZE)
         self.vertical_momentum = 0
 
         self.min_step_height = .5  # in TILESIZE Größe gerechnet
@@ -86,6 +144,7 @@ class Player():
 
     def _is_steppable(self, tile: Rect):
         top_point = tile.y - tile.height
+        print(top_point - self.pos.y <= self.min_step_height * TILESIZE)
         return top_point - self.pos.y <= self.min_step_height * TILESIZE and self._last_collision_types["bottom"] and (self._last_collision_types["right"] or self._last_collision_types["left"])
 
     def _is_steppable_ramp(self, ramp: Ramp):
@@ -201,7 +260,10 @@ gravity = 2500
 max_gravity = 1000
 jumpforce = 700
 pygame_gui_manager = pygame_gui.ui_manager.UIManager((800, 600))
+tile_map = TileMap()
+tile_map.add(tiles)
 
+# region Slider setup
 gravity_slider = pygame_gui.elements.UIHorizontalSlider(relative_rect=pygame.Rect(210, 500, 500, 30),
                                                         start_value=gravity,
                                                         value_range=(100, 2500),
@@ -232,6 +294,8 @@ jumpforce_textbox = pygame_gui.elements.ui_text_entry_box.UITextEntryBox(pygame.
 jumpforce_lbl = pygame_gui.elements.ui_label.UILabel(pygame.Rect(10, 560, 90, 30),
                                                      "Jumpforce",
                                                      pygame_gui_manager)
+# endregion
+
 # Loop ------------------------------------------------------- #
 while True:
     dt = mainClock.tick(0) * 0.001
@@ -256,51 +320,53 @@ while True:
 
     pygame.draw.rect(screen, p.color, p.rect)
 
-    # Tiles -------------------------------------------------- #
-    for t in tiles:
-        color = t.color
-        if t.type == TileType.TILE:
-            pass
-            pygame.draw.rect(screen, color, tile_rect(t))
-        elif t.type == TileType.RAMP_RIGHT:
-            """Skizze
-                          p3
-                        / |
-                      /   |
-                    /     |
-                  /       |
-                /         |
-              /           |
-            p1 ---------- p2
-            """
-            elev = t.elevation
-            p1 = Vector2(t.pos.x * TILESIZE, (t.pos.y + 1) * TILESIZE)
-            p2 = Vector2((t.pos.x + 1) * TILESIZE, (t.pos.y + 1) * TILESIZE)
-            p3 = Vector2((t.pos.x + 1) * TILESIZE, (t.pos.y * TILESIZE) + TILESIZE - (TILESIZE * t.elevation))
+    # region Tiles -------------------------------------------------- #
+    # for t in tiles:
+    #     color = t.color
+    #     if t.type == TileType.TILE:
+    #         pass
+    #         pygame.draw.rect(screen, color, tile_rect(t))
+    #     elif t.type == TileType.RAMP_RIGHT:
+    #         """Skizze
+    #                       p3
+    #                     / |
+    #                   /   |
+    #                 /     |
+    #               /       |
+    #             /         |
+    #           /           |
+    #         p1 ---------- p2
+    #         """
+    #         elev = t.elevation
+    #         p1 = Vector2(t.pos.x * TILESIZE, (t.pos.y + 1) * TILESIZE)
+    #         p2 = Vector2((t.pos.x + 1) * TILESIZE, (t.pos.y + 1) * TILESIZE)
+    #         p3 = Vector2((t.pos.x + 1) * TILESIZE, (t.pos.y * TILESIZE) + TILESIZE - (TILESIZE * t.elevation))
 
-            pygame.draw.polygon(screen, color, [p1, p2, p3])
+    #         pygame.draw.polygon(screen, color, [p1, p2, p3])
 
-            render_collision_mesh(screen, "white", t, 3)
+    #         render_collision_mesh(screen, "white", t, 3)
 
-        elif t.type == TileType.RAMP_LEFT:
-            """Skizze
-            p3
-            | \
-            |   \
-            |     \
-            |       \
-            |         \
-            |           \
-            p1 ---------- p2
-            """
-            elev = t.elevation
-            p1 = Vector2(t.pos.x * TILESIZE, (t.pos.y + 1) * TILESIZE)
-            p2 = Vector2((t.pos.x + 1) * TILESIZE - 1, (t.pos.y + 1) * TILESIZE)  # -1 kann man eigentlich weglasse, nur mit siehts schöner aus. Irgendwie ist das ein bisschen länger als TILESIZE
-            p3 = Vector2(t.pos.x * TILESIZE, (t.pos.y * TILESIZE) + TILESIZE - (TILESIZE * t.elevation))
+    #     elif t.type == TileType.RAMP_LEFT:
+    #         """Skizze
+    #         p3
+    #         | \
+    #         |   \
+    #         |     \
+    #         |       \
+    #         |         \
+    #         |           \
+    #         p1 ---------- p2
+    #         """
+    #         elev = t.elevation
+    #         p1 = Vector2(t.pos.x * TILESIZE, (t.pos.y + 1) * TILESIZE)
+    #         p2 = Vector2((t.pos.x + 1) * TILESIZE - 1, (t.pos.y + 1) * TILESIZE)  # -1 kann man eigentlich weglasse, nur mit siehts schöner aus. Irgendwie ist das ein bisschen länger als TILESIZE
+    #         p3 = Vector2(t.pos.x * TILESIZE, (t.pos.y * TILESIZE) + TILESIZE - (TILESIZE * t.elevation))
 
-            pygame.draw.polygon(screen, color, [p1, p2, p3])
+    #         pygame.draw.polygon(screen, color, [p1, p2, p3])
 
-            render_collision_mesh(screen, "white", t, 3)
+    #         render_collision_mesh(screen, "white", t, 3)
+
+    tile_map.render(screen)
 
     cols = font.render(f"{collisions}", True, "white")
     lcols = font.render(f"{p._last_collision_types}", True, "white")
@@ -346,6 +412,7 @@ while True:
             if event.key == pygame.K_a:
                 left = False
 
+        # region ui events
         if event.type == pygame_gui.UI_HORIZONTAL_SLIDER_MOVED:
             if event.ui_element == gravity_slider:
                 print('current slider value:', event.value)
@@ -388,6 +455,7 @@ while True:
                     print(f"Converting error: {event.text=}")
                 jumpforce_slider.set_current_value(val)
                 jumpforce = val
+        # endregion
 
         pygame_gui_manager.process_events(event)
 
