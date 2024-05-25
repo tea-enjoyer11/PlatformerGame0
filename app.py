@@ -13,6 +13,8 @@ screen = pygame.display.set_mode((800, 600), 0, 32)
 font = pygame.font.SysFont("arial", 21)
 
 TILESIZE = 32
+CHUNKSIZE = 5
+CHUNKWIDTH = CHUNKSIZE * TILESIZE
 
 
 def load_image(path: str) -> Surface:
@@ -24,6 +26,14 @@ def load_image(path: str) -> Surface:
 IMGS = [load_image("assets/tile.png"), load_image("assets/ramp_left.png"), load_image("assets/ramp_right.png")]
 
 
+def props(cls):
+    return [i for i in cls.__dict__.keys() if i[:1] != '_']
+
+
+def dist(p1: Vector2, p2: Vector2) -> float:
+    return ((p1.x - p2.x)**2 + (p1.y - p2.y)**2)**0.5
+
+
 class TileType(Enum):
     TILE = auto()
     RAMP_LEFT = auto()
@@ -31,6 +41,8 @@ class TileType(Enum):
 
 
 class Tile:
+    __slots__ = ("pos", "color", "type", "img_idx")
+
     def __init__(self, color: Color, pos: Vector2, tile_type: TileType = TileType.TILE) -> None:
         if not isinstance(pos, Vector2):
             pos = Vector2(pos)
@@ -42,6 +54,8 @@ class Tile:
 
 
 class Ramp(Tile):
+    __slots__ = ("elevation",)
+
     def __init__(self, color: Color, pos: Vector2, tile_type: TileType, elevation: float = 1) -> None:  # angegeben in wie TILESIZE einheit
         super().__init__(color, pos, tile_type)
 
@@ -53,28 +67,82 @@ class Ramp(Tile):
             self.img_idx = 2
 
 
-# class Chunk:
-#     def __init__(self, pos: Vector2, size: Vector2 = Vector2(16, 16)) -> None:
-#         self.pos = pos
-#         self.size = size
+class Chunk:
+    __slots__ = ("pos", "size", "_tiles", "_pre_renderd_surf")
 
-#     def pre_render(self):
-#         ...
+    def __init__(self, pos: Vector2, size) -> None:
+        self.pos = pos
+        self.size = size
+        self._tiles: dict[tuple, Tile] = {}
 
-#     def get_pre_render(self):
-#         ...
+        self._pre_renderd_surf: Surface = None
 
-def props(cls):
-    return [i for i in cls.__dict__.keys() if i[:1] != '_']
+    def get(self, pos: tuple) -> Tile | None:
+        if pos in self._tiles:
+            return self._tiles[pos]
+        return None
+
+    def get_all(self) -> list[Tile]:
+        return list(self._tiles.values())
+
+    def add(self, tile: Tile) -> None:
+        pos = tuple(tile.pos)
+        pos = (pos[0] % CHUNKSIZE, pos[1] % CHUNKSIZE)
+        # print("         localpos: ", pos)
+        self._tiles[pos] = tile
+
+    def adds(self, tiles: list[Tile]) -> None:
+        for tile in tiles:
+            pos = tuple(tile.pos)
+            pos = (pos[0] % CHUNKSIZE, pos[1] % CHUNKSIZE)
+            self._tiles[pos] = tile
+
+    def pre_render(self):
+        w, h = self.size[0] * TILESIZE, self.size[1] * TILESIZE
+        surf = Surface((w, h))
+        surf.set_colorkey("black")
+
+        # l = []
+        # for local_pos, tile in self._tiles.items():
+        #     local_pos = (local_pos[0] * TILESIZE, local_pos[1] * TILESIZE)
+        #     l.append((IMGS[tile.img_idx], local_pos))
+        l = [(IMGS[tile.img_idx], (local_pos[0] * TILESIZE, local_pos[1] * TILESIZE)) for local_pos, tile in self._tiles.items()]
+        surf.fblits(l)
+
+        self._pre_renderd_surf = surf
+
+    def get_pre_render(self) -> tuple[Surface, tuple]:
+        global_pos = tuple(self.pos)
+        global_pos = (global_pos[0] * self.size[0] * TILESIZE, global_pos[1] * self.size[1] * TILESIZE)
+        return (self._pre_renderd_surf, global_pos)
 
 
 class TileMap:
-    def __init__(self) -> None:
-        self._tiles: dict[tuple, Tile] = {}
+    def __init__(self, chunk_size=(CHUNKSIZE, CHUNKSIZE)) -> None:
+        # self._tiles: dict[tuple, Tile] = {}
+        self._chunks: dict[tuple, Chunk] = {}
 
-    def add(self, tiles: Tile) -> None:
-        for t in tiles:
-            self._tiles[tuple(t.pos)] = t
+        self.chunk_size = chunk_size
+
+        self.amount_of_tiles = 0
+
+    def pre_render_chunks(self) -> None:
+        [c.pre_render() for c in self._chunks.values()]
+
+    def add(self, tiles: list[Tile]) -> None:
+        for tile in tiles:
+            # self._tiles[tuple(tile.pos)] = tile
+
+            related_chunk_pos = (tile.pos.x // self.chunk_size[0], tile.pos.y // self.chunk_size[1])
+            # print(related_chunk_pos)
+
+            if related_chunk_pos not in self._chunks:
+                # chunk_pos = (related_chunk_pos[0] * TILESIZE, related_chunk_pos[1] * TILESIZE)
+                self._chunks[related_chunk_pos] = Chunk(related_chunk_pos, size=self.chunk_size)
+
+            chunk = self._chunks[related_chunk_pos]
+            chunk.add(tile)
+        self.amount_of_tiles += len(tiles)
 
     def get(self, pos: tuple) -> Tile:
         if not isinstance(pos, tuple):
@@ -86,14 +154,34 @@ class TileMap:
         if pos in self._tiles:
             return self._tiles[pos]
 
+    def get_around(self, pos: Vector2, range: float) -> list[Tile]:
+        related_chunk_pos = Vector2(pos.x / TILESIZE // self.chunk_size[0], pos.y / TILESIZE // self.chunk_size[1])
+        # print("related chunk position:", related_chunk_pos, pos)
+        ret = []
+        neighbors = [Vector2(0.0, 0.0), Vector2(-1.0, 0.0), Vector2(1.0, 0.0), Vector2(0.0, -1.0), Vector2(0.0, 1.0)]
+        for offset in neighbors:
+            chunk_pos = related_chunk_pos + offset
+            if tuple(chunk_pos) in self._chunks:
+                # print(chunk_pos, "is in check radius")
+                tiles = self._chunks[tuple(chunk_pos)].get_all()
+                ret += tiles
+        return ret
+
     def get_all(self) -> list[Tile]:
-        return list(self._tiles.values())
+        return [chunk.get_all() for chunk in self._chunks]
 
     def render(self, surf: Surface) -> None:
+        # l = []
+        # for pos, tile in self._tiles.items():
+        #     l.append((IMGS[tile.img_idx], (pos[0] * TILESIZE, pos[1] * TILESIZE)))
+        # surf.fblits(l)
         l = []
-        for pos, tile in self._tiles.items():
-            l.append((IMGS[tile.img_idx], (pos[0] * TILESIZE, pos[1] * TILESIZE)))
+        for pos, chunk in self._chunks.items():
+            l.append(chunk.get_pre_render())
         surf.fblits(l)
+
+        for pos in self._chunks:
+            pygame.draw.rect(surf, "red", Rect(pos[0] * CHUNKWIDTH, pos[1] * CHUNKWIDTH, TILESIZE * CHUNKSIZE, TILESIZE * CHUNKSIZE), 1)
 
 
 def collision_test(object_1: Rect, object_list: list[Rect]) -> list[Rect]:
@@ -144,7 +232,7 @@ class Player():
 
     def _is_steppable(self, tile: Rect):
         top_point = tile.y - tile.height
-        print(top_point - self.pos.y <= self.min_step_height * TILESIZE)
+        # print(top_point - self.pos.y <= self.min_step_height * TILESIZE)
         return top_point - self.pos.y <= self.min_step_height * TILESIZE and self._last_collision_types["bottom"] and (self._last_collision_types["right"] or self._last_collision_types["left"])
 
     def _is_steppable_ramp(self, ramp: Ramp):
@@ -245,11 +333,14 @@ class Player():
 
 
 # generate test map
-tiles: list[Ramp | Tile] = [Tile("red", Vector2(0, 0)), Ramp('red', Vector2(3, 8), TileType.RAMP_RIGHT), Ramp('red', Vector2(5, 8), TileType.RAMP_RIGHT), Ramp('red', Vector2(7, 8), TileType.RAMP_LEFT, 0.5), Tile('red', Vector2(6, 8)), Tile('red', Vector2(4, 6)), Ramp('red', Vector2(4, 5), TileType.RAMP_LEFT), Tile('red', Vector2(3, 5)), Tile("red", Vector2(11, 8)), Tile("red", Vector2(14, 8)), Tile("red", Vector2(14, 7))]
-# tiles: list[Ramp | Tile] = [Ramp("red", Vector2(2, 8), TileType.RAMP_RIGHT, 1), Ramp("red", Vector2(4, 8), TileType.RAMP_LEFT, 1), Ramp("red", Vector2(6, 8), TileType.RAMP_RIGHT, 0.5), Ramp("red", Vector2(8, 8), TileType.RAMP_LEFT, 0.5), Ramp("red", Vector2(10, 8), TileType.RAMP_RIGHT, 2), Ramp("red", Vector2(12, 8), TileType.RAMP_LEFT, 2)]
+# tiles: list[Ramp | Tile] = [Tile("red", Vector2(0, 0)), Ramp('red', Vector2(3, 8), TileType.RAMP_RIGHT), Ramp('red', Vector2(5, 8), TileType.RAMP_RIGHT), Ramp('red', Vector2(7, 8), TileType.RAMP_LEFT, 0.5), Tile('red', Vector2(6, 8)), Tile('red', Vector2(4, 6)), Ramp('red', Vector2(4, 5), TileType.RAMP_LEFT), Tile('red', Vector2(3, 5)), Tile("red", Vector2(11, 8)), Tile("red", Vector2(14, 8)), Tile("red", Vector2(14, 7))]
+tiles: list[Ramp | Tile] = [Ramp("red", Vector2(2, 8), TileType.RAMP_RIGHT, 1), Ramp("red", Vector2(4, 8), TileType.RAMP_LEFT, 1), Ramp("red", Vector2(6, 8), TileType.RAMP_RIGHT, 0.5), Ramp("red", Vector2(8, 8), TileType.RAMP_LEFT, 0.5), Ramp("red", Vector2(10, 8), TileType.RAMP_RIGHT, 2), Ramp("red", Vector2(12, 8), TileType.RAMP_LEFT, 2)]
 for i in range(16):
     tiles.append(Tile('red', Vector2(i, 9)))
-
+# tiles = []
+for x in range(500):
+    for y in range(500):
+        tiles.append(Tile('red', Vector2(x, 10 + y)))
 p = Player(Vector2(200, 500))
 
 right = False
@@ -262,6 +353,7 @@ jumpforce = 700
 pygame_gui_manager = pygame_gui.ui_manager.UIManager((800, 600))
 tile_map = TileMap()
 tile_map.add(tiles)
+tile_map.pre_render_chunks()
 
 # region Slider setup
 gravity_slider = pygame_gui.elements.UIHorizontalSlider(relative_rect=pygame.Rect(210, 500, 500, 30),
@@ -314,7 +406,8 @@ while True:
     if left:
         player_movement[0] -= speed
 
-    collisions = p.move(player_movement, tiles, dt)
+    close_tiles = tile_map.get_around(p.pos, 5)
+    collisions = p.move(player_movement, close_tiles, dt)
     if (collisions['bottom']) or (collisions['top']):
         p.vertical_momentum = 0
 
@@ -375,12 +468,14 @@ while True:
     fps_surf = font.render(f"{mainClock.get_fps():.0f}", True, "white")
     dt_surf = font.render(f"DT:{dt:.4f} DT multiplier:{dt_multiplicator:.4f}", True, "white")
     playerinfo_surf = font.render(f"POS:{p.pos}", True, "white")
+    map_info_surf = font.render(f"TILEMAP\nAmount of Chunks: {len(tile_map._chunks)}\nAmount of Tiles: {tile_map.amount_of_tiles}", True, "white")
     screen.blit(cols, (0, 0))
     screen.blit(lcols, (0, 20))
     screen.blit(cols_same, (0, 40))
     screen.blit(dt_surf, (0, 80))
-    screen.blit(fps_surf, (600, 0))
-    screen.blit(playerinfo_surf, (600, 50))
+    screen.blit(fps_surf, (500, 0))
+    screen.blit(playerinfo_surf, (500, 50))
+    screen.blit(map_info_surf, (500, 100))
 
     # Buttons ------------------------------------------------ #
     for event in pygame.event.get():
