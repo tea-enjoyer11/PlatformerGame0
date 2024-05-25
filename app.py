@@ -5,7 +5,8 @@ import sys
 from pygame import Vector2, Surface, Rect, Color
 import pygame_gui
 import pygame_gui.ui_manager
-
+from typing import Iterable, Hashable, Optional, Callable, Sequence
+import random
 
 RES = Vector2(800, 600)
 
@@ -19,6 +20,121 @@ font = pygame.font.SysFont("arial", 21)
 TILESIZE = 16
 CHUNKSIZE = 8
 CHUNKWIDTH = CHUNKSIZE * TILESIZE
+
+
+class ImageCache:
+    def __init__(self, make_image_func: Callable[[Hashable], pygame.Surface]):
+        self.cache: dict[Hashable, pygame.Surface] = {}
+        self.misses = 0
+        self.make_image = make_image_func
+
+    def get_image(self, item: Hashable) -> pygame.Surface:
+        if item not in self.cache:
+            self.misses += 1
+            self.cache[item] = self.make_image(item)
+        return self.cache[item]
+
+
+class Particle:
+    def update(self, dt: float, *args, **kwargs) -> bool:
+        """Return False when particle should be removed."""
+        return True
+
+    def draw_pos(self, image: pygame.Surface) -> Sequence[float]:
+        raise NotImplementedError
+
+    def cache_lookup(self) -> Hashable:
+        raise NotImplementedError
+
+
+class ParticleGroup:
+    def __init__(self, image_cache: ImageCache, blend: int = pygame.BLENDMODE_NONE,
+                 particles: Optional[list[Particle]] = None):
+        self.particles: list[Particle] = particles if particles is not None else []
+        self.image_cache = image_cache
+        self.blend = blend
+
+    def __len__(self):
+        return len(self.particles)
+
+    def add(self, particles: Particle | Iterable[Particle]):
+        if isinstance(particles, Particle):
+            self.particles.append(particles)
+        else:
+            self.particles.extend(particles)
+
+    def update(self, dt: float, *args, **kwargs):
+        self.particles = [p for p in self.particles if p.update(dt, *args, **kwargs)]
+
+    def _get_draw_tuple(self, p: Particle) -> tuple[pygame.Surface, Sequence[float]]:
+        image = self.image_cache.get_image(p.cache_lookup())
+        return image, p.draw_pos(image)
+
+    def _in_range(self, pos: tuple, boundary: tuple) -> bool:
+
+        return False
+
+    def draw(self, screen: pygame.Surface, blend: int = pygame.BLENDMODE_NONE):
+        screen.fblits([self._get_draw_tuple(p) for p in self.particles], blend if blend else self.blend)
+
+    def draw2(self, screen: pygame.Surface, blend: int = pygame.BLENDMODE_NONE):
+        # VIIEEEELLL ZU LANGSAM
+        arr = []
+        boundary = screen.get_size()
+        for p in self.particles:
+            draw_tuple = self._get_draw_tuple(p)
+            if draw_tuple[1][0] not in range(boundary[0]) or draw_tuple[1][1] not in range(boundary[1]):
+                arr.append(draw_tuple)
+        screen.fblits(arr, blend if blend else self.blend)
+
+
+class CircleParticle(Particle):
+    def __init__(self, pos: tuple, vel: tuple, max_imgs: int, type: str = "particle") -> None:
+        self.type = type
+        self.pos = pos
+        self.vel = vel
+        self.max_ints = max_imgs
+        self.state = 0  # which img to use right now?
+
+    def update(self, dt: float, *args, **kwargs) -> bool:
+        self.pos = (self.pos[0] + self.vel[0] * dt, self.pos[1] + self.vel[1] * dt)
+        self.state += dt * 10
+        if self.state > self.max_ints - 1:
+            return False
+        return True
+
+    def draw_pos(self, image: pygame.Surface) -> Sequence[float]:
+        # img benötigt um zu centern, falls gewollt
+        return self.pos
+
+    def cache_lookup(self) -> Hashable:
+        return f"assets/particles/{self.type}/{int(self.state)}.png"
+
+
+class LeafParticle(Particle):
+    def __init__(self, pos: tuple, vel: tuple, max_imgs: int, type: str = "leaf") -> None:
+        self.type = type
+        self.pos = pos
+        self.vel = vel
+        self.max_ints = max_imgs
+        self.state = 0  # which img to use right now?
+
+    def update(self, dt: float, *args, **kwargs) -> bool:
+        self.pos = (self.pos[0] + self.vel[0] * dt, self.pos[1] + self.vel[1] * dt)
+        self.state += dt * 10
+        if self.state > self.max_ints - 1:
+            return False
+        return True
+
+    def draw_pos(self, image: pygame.Surface) -> Sequence[float]:
+        # img benötigt um zu centern, falls gewollt
+        return self.pos
+
+    def cache_lookup(self) -> Hashable:
+        s = str(int(self.state))
+        if len(s) < 2:
+            s = "0" + s
+        return f"assets/particles/{self.type}/{s}.png"
 
 
 def load_image(path: str) -> Surface:
@@ -390,6 +506,10 @@ tile_map = TileMap()
 tile_map.add(tiles)
 tile_map.pre_render_chunks()
 
+img_cache = ImageCache(load_image)
+particle_group = ParticleGroup(img_cache)
+
+
 # region Slider setup
 gravity_slider = pygame_gui.elements.UIHorizontalSlider(relative_rect=pygame.Rect(210, 500, 500, 30),
                                                         start_value=gravity,
@@ -463,7 +583,7 @@ while True:
 
     pygame.draw.rect(screen, p.color, Rect(Vector2(p.rect.topleft) - scroll, p.rect.size))
 
-    # region Tiles -------------------------------------------------- #
+    # Tiles -------------------------------------------------- #
     # for t in tiles:
     #     color = t.color
     #     if t.type == TileType.TILE:
@@ -518,7 +638,8 @@ while True:
     fps_surf = font.render(f"{mainClock.get_fps():.0f}", True, "white")
     dt_surf = font.render(f"DT:{dt:.4f} DT multiplier:{dt_multiplicator:.4f}", True, "white")
     playerinfo_surf = font.render(f"POS:{p.pos} NOCLIP: {noclip}", True, "white")
-    map_info_surf = font.render(f"TILEMAP\nAmount of Chunks: {len(tile_map._chunks)}\nAmount of Tiles: {tile_map.amount_of_tiles}", True, "white")
+    map_info_surf = font.render(f"TILEMAP:\nAmount of Chunks: {len(tile_map._chunks)}\nAmount of Tiles: {tile_map.amount_of_tiles}", True, "white")
+    particle_info_surf = font.render(f"PARTICLES:\nAmount of Particles: {len(particle_group)}", True, "white")
     screen.blit(cols, (0, 0))
     screen.blit(lcols, (0, 20))
     screen.blit(cols_same, (0, 40))
@@ -526,6 +647,7 @@ while True:
     screen.blit(fps_surf, (500, 0))
     screen.blit(playerinfo_surf, (500, 50))
     screen.blit(map_info_surf, (500, 100))
+    screen.blit(particle_info_surf, (500, 200))
 
     # Buttons ------------------------------------------------ #
     for event in pygame.event.get():
@@ -615,6 +737,15 @@ while True:
         # endregion
 
         pygame_gui_manager.process_events(event)
+
+    m_pos = tuple(pygame.Vector2(pygame.mouse.get_pos()))
+    if pygame.mouse.get_pressed()[0]:
+        particle_group.add([CircleParticle(m_pos, (random.randrange(-100, 100), random.randrange(-100, 100)), 4, type="particle") for _ in range(5)])
+    if pygame.mouse.get_pressed()[2]:
+        particle_group.add([LeafParticle(m_pos, (random.randrange(-30, 30), random.randrange(-30, 30)), 18, type="leaf") for _ in range(5)])
+
+    particle_group.update(dt)
+    particle_group.draw(screen, blend=pygame.BLEND_RGB_ADD)
 
     pygame_gui_manager.update(dt)
     pygame_gui_manager.draw_ui(screen)
