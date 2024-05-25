@@ -6,14 +6,18 @@ from pygame import Vector2, Surface, Rect, Color
 import pygame_gui
 import pygame_gui.ui_manager
 
+
+RES = Vector2(800, 600)
+
+
 mainClock = pygame.time.Clock()
 pygame.init()
 pygame.font.init()
-screen = pygame.display.set_mode((800, 600), 0, 32)
+screen = pygame.display.set_mode(RES, 0, 32)
 font = pygame.font.SysFont("arial", 21)
 
-TILESIZE = 32
-CHUNKSIZE = 5
+TILESIZE = 16
+CHUNKSIZE = 8
 CHUNKWIDTH = CHUNKSIZE * TILESIZE
 
 
@@ -23,7 +27,8 @@ def load_image(path: str) -> Surface:
     return i
 
 
-IMGS = [load_image("assets/tile.png"), load_image("assets/ramp_left.png"), load_image("assets/ramp_right.png")]
+# IMGS = [load_image("assets/tile.png"), load_image("assets/ramp_left.png"), load_image("assets/ramp_right.png")]
+IMGS = [load_image("assets/tiles/grass/0.png"), load_image("assets/tiles/grass/3.png"), load_image("assets/tiles/grass/7.png")]
 
 
 def props(cls):
@@ -111,13 +116,15 @@ class Chunk:
 
         self._pre_renderd_surf = surf
 
-    def get_pre_render(self) -> tuple[Surface, tuple]:
+    def get_pre_render(self, offset: Vector2 = Vector2(0)) -> tuple[Surface, tuple]:
         global_pos = tuple(self.pos)
-        global_pos = (global_pos[0] * self.size[0] * TILESIZE, global_pos[1] * self.size[1] * TILESIZE)
+        global_pos = (global_pos[0] * self.size[0] * TILESIZE - offset[0], global_pos[1] * self.size[1] * TILESIZE - offset[1])
         return (self._pre_renderd_surf, global_pos)
 
 
 class TileMap:
+    __slots__ = ("_chunks", "chunk_size", "amount_of_tiles", "culling_offset")
+
     def __init__(self, chunk_size=(CHUNKSIZE, CHUNKSIZE)) -> None:
         # self._tiles: dict[tuple, Tile] = {}
         self._chunks: dict[tuple, Chunk] = {}
@@ -125,6 +132,11 @@ class TileMap:
         self.chunk_size = chunk_size
 
         self.amount_of_tiles = 0
+
+        self.culling_offset = Vector2(
+            RES.x // TILESIZE / 4,
+            RES.y // TILESIZE / 4
+        )
 
     def pre_render_chunks(self) -> None:
         [c.pre_render() for c in self._chunks.values()]
@@ -170,18 +182,24 @@ class TileMap:
     def get_all(self) -> list[Tile]:
         return [chunk.get_all() for chunk in self._chunks]
 
-    def render(self, surf: Surface) -> None:
-        # l = []
-        # for pos, tile in self._tiles.items():
-        #     l.append((IMGS[tile.img_idx], (pos[0] * TILESIZE, pos[1] * TILESIZE)))
-        # surf.fblits(l)
+    def render(self, surf: Surface, target_pos: Vector2, offset: Vector2 = Vector2(0)) -> None:
+        target_pos = (target_pos[0] / TILESIZE // self.chunk_size[0], target_pos[1] / TILESIZE // self.chunk_size[1])
+
+        p1 = (int(target_pos[0] - self.culling_offset.x), int(target_pos[1] - self.culling_offset.x))
+        p2 = (int(target_pos[0] + self.culling_offset.y), int(target_pos[1] + self.culling_offset.y))
+
         l = []
-        for pos, chunk in self._chunks.items():
-            l.append(chunk.get_pre_render())
+        for y in range(p1[1], p2[1] + 1):
+            for x in range(p1[0], p2[0] + 1):
+                if (x, y) in self._chunks:
+                    l.append(self._chunks[(x, y)].get_pre_render(offset))
+
         surf.fblits(l)
 
-        for pos in self._chunks:
-            pygame.draw.rect(surf, "red", Rect(pos[0] * CHUNKWIDTH, pos[1] * CHUNKWIDTH, TILESIZE * CHUNKSIZE, TILESIZE * CHUNKSIZE), 1)
+        for y in range(p1[1], p2[1] + 1):
+            for x in range(p1[0], p2[0] + 1):
+                if (x, y) in self._chunks:
+                    pygame.draw.rect(surf, "red", Rect(x * CHUNKWIDTH - offset[0], y * CHUNKWIDTH - offset[1], TILESIZE * CHUNKSIZE, TILESIZE * CHUNKSIZE), 1)
 
 
 def collision_test(object_1: Rect, object_list: list[Rect]) -> list[Rect]:
@@ -217,6 +235,8 @@ def render_collision_mesh(surf: Surface, color: Color, t: Tile | Ramp, width: in
 
 
 class Player():
+    __slots__ = ("pos", "color", "rect", "vertical_momentum", "min_step_height", "_last_pos", "_collision_types", "_last_collision_types")
+
     def __init__(self, pos: Vector2):
         self.pos = pos
         self.color = (0, 0, 255)
@@ -238,14 +258,24 @@ class Player():
     def _is_steppable_ramp(self, ramp: Ramp):
         return TILESIZE * ramp.elevation <= self.min_step_height * TILESIZE
 
-    def move(self, movement: Sequence[float], tiles: list[Tile], dt: float):
+    def move(self, movement: Sequence[float], tiles: list[Tile], dt: float, noclip: bool = False):
         self._last_pos = self.pos.copy()
         self._last_collision_types = self._collision_types.copy()
+        collision_types = {'top': False, 'bottom': False, 'right': False, 'left': False}
+
+        if noclip:
+            self.pos[0] += movement[0] * dt
+            self.rect.x = int(self.pos[0])
+            self.pos[1] += movement[1] * dt
+            self.rect.y = int(self.pos[1])
+
+            self._collision_types = collision_types
+            return collision_types
+
         normal_tiles = [tile_rect(t) for t in tiles if t.type == TileType.TILE]  # make list of all normal tile rects
         ramps: list[Ramp] = [t for t in tiles if t.type in [TileType.RAMP_LEFT, TileType.RAMP_RIGHT]]  # make list of all ramps
 
         # handle standard collisions
-        collision_types = {'top': False, 'bottom': False, 'right': False, 'left': False}
         self.pos[0] += movement[0] * dt
         self.rect.x = int(self.pos[0])
         tile_hit_list = collision_test(self.rect, normal_tiles)
@@ -338,18 +368,23 @@ tiles: list[Ramp | Tile] = [Ramp("red", Vector2(2, 8), TileType.RAMP_RIGHT, 1), 
 for i in range(16):
     tiles.append(Tile('red', Vector2(i, 9)))
 # tiles = []
-for x in range(500):
-    for y in range(500):
+for x in range(-100, 100):
+    for y in range(100):
         tiles.append(Tile('red', Vector2(x, 10 + y)))
 p = Player(Vector2(200, 500))
 
 right = False
 left = False
+up = False
+down = False
+boost = False
 speed = 200
 dt_multiplicator = 1
 gravity = 2500
 max_gravity = 1000
 jumpforce = 700
+noclip = False
+scroll = Vector2(0)
 pygame_gui_manager = pygame_gui.ui_manager.UIManager((800, 600))
 tile_map = TileMap()
 tile_map.add(tiles)
@@ -393,25 +428,40 @@ while True:
     dt = mainClock.tick(0) * 0.001
     dt *= dt_multiplicator
 
+    # self.scroll += ((self.player.pos - Vector2(4, 4)) - RES / 4 / 2 - self.scroll) / 30
+    scroll += ((p.pos - Vector2(TILESIZE / 2)) - RES / 2 - scroll) / 30
+
     # Background --------------------------------------------- #
     screen.fill((0, 0, 0))
 
     # Player ------------------------------------------------- #
-    p.vertical_momentum += gravity * dt
-    p.vertical_momentum = min(p.vertical_momentum, max_gravity)
-    player_movement = [0, p.vertical_momentum]
+    if not noclip:
+        p.vertical_momentum += gravity * dt
+        p.vertical_momentum = min(p.vertical_momentum, max_gravity)
+        player_movement = [0, p.vertical_momentum]
+    if noclip:
+        player_movement = [0, 0]
 
     if right:
         player_movement[0] += speed
     if left:
         player_movement[0] -= speed
+    if noclip:
+        if up:
+            player_movement[1] -= speed
+        if down:
+            player_movement[1] += speed
+
+    if boost:
+        player_movement[0] *= 4
+        player_movement[1] *= 4
 
     close_tiles = tile_map.get_around(p.pos, 5)
-    collisions = p.move(player_movement, close_tiles, dt)
-    if (collisions['bottom']) or (collisions['top']):
+    collisions = p.move(player_movement, close_tiles, dt, noclip)
+    if (collisions['bottom']) or (collisions['top']) and not noclip:
         p.vertical_momentum = 0
 
-    pygame.draw.rect(screen, p.color, p.rect)
+    pygame.draw.rect(screen, p.color, Rect(Vector2(p.rect.topleft) - scroll, p.rect.size))
 
     # region Tiles -------------------------------------------------- #
     # for t in tiles:
@@ -459,7 +509,7 @@ while True:
 
     #         render_collision_mesh(screen, "white", t, 3)
 
-    tile_map.render(screen)
+    tile_map.render(screen, p.pos, offset=scroll)
 
     cols = font.render(f"{collisions}", True, "white")
     lcols = font.render(f"{p._last_collision_types}", True, "white")
@@ -467,7 +517,7 @@ while True:
     cols_same = font.render(f"Are the last and current collisions the same: {s}", True, "white")
     fps_surf = font.render(f"{mainClock.get_fps():.0f}", True, "white")
     dt_surf = font.render(f"DT:{dt:.4f} DT multiplier:{dt_multiplicator:.4f}", True, "white")
-    playerinfo_surf = font.render(f"POS:{p.pos}", True, "white")
+    playerinfo_surf = font.render(f"POS:{p.pos} NOCLIP: {noclip}", True, "white")
     map_info_surf = font.render(f"TILEMAP\nAmount of Chunks: {len(tile_map._chunks)}\nAmount of Tiles: {tile_map.amount_of_tiles}", True, "white")
     screen.blit(cols, (0, 0))
     screen.blit(lcols, (0, 20))
@@ -490,10 +540,14 @@ while True:
                 right = True
             if event.key == pygame.K_a:
                 left = True
+            if event.key == pygame.K_w:
+                up = True
+            if event.key == pygame.K_s:
+                down = True
             if event.key == pygame.K_SPACE:
                 p.vertical_momentum = -jumpforce
             if event.key == pygame.K_TAB:
-                speed = 200 if speed == 200 else 100
+                noclip = not noclip
             if event.key == pygame.K_UP:
                 dt_multiplicator = min(5, dt_multiplicator + 0.5)
             if event.key == pygame.K_DOWN:
@@ -501,11 +555,19 @@ while True:
             if event.key == pygame.K_r:
                 p.pos = Vector2(200, 50)
                 p.vertical_momentum = 0
+            if event.key == pygame.K_LCTRL:
+                boost = True
         if event.type == pygame.KEYUP:
             if event.key == pygame.K_d:
                 right = False
             if event.key == pygame.K_a:
                 left = False
+            if event.key == pygame.K_w:
+                up = False
+            if event.key == pygame.K_s:
+                down = False
+            if event.key == pygame.K_LCTRL:
+                boost = False
 
         # region ui events
         if event.type == pygame_gui.UI_HORIZONTAL_SLIDER_MOVED:
