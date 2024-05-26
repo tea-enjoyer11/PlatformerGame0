@@ -1,3 +1,16 @@
+# particle system (instanced durch OpenGL)
+
+**Idee**
+Mithilfe von OpenGl
+
+# shadowcasting
+
+**Idee**
+Vllt mithilfe von modernGL die pygamesurface in eine opengl textur verwandeln und dann mithilfe von vertex- und fragmentshadern shadowcasting zu machen.
+
+Der hier hats hinbekommen:
+https://github.com/MarkelZ/pygame-light2d
+
 # Async
 
 **corroutines**

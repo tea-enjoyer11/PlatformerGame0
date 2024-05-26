@@ -9,6 +9,8 @@ BASE_SOUND_PATH = ""
 
 if not pygame.mixer.get_init():
     pygame.mixer.init()
+if not pygame.font.get_init():
+    pygame.font.init()
 
 
 def load_image(path: str) -> Surface:
@@ -17,28 +19,8 @@ def load_image(path: str) -> Surface:
     return i
 
 
-def lerp(start: float, end: float, time: float) -> float:
-    return start + (end - start) * time
-
-
-def Vector2Lerp(start: Vector2, end: Vector2, time: float) -> Vector2:
-    return start + (end - start) * time
-
-
-def dist(p1: Vector2, p2: Vector2) -> float:
-    return ((p2[0] - p1[0]) ** 2 + (p2[1] - p1[1])) ** 0.5
-
-
-def clamp(minimum, x, maximum):
-    return max(minimum, min(x, maximum))
-
-
-def clamp_bottom(minimun, x):
-    return max(minimun, x)
-
-
-def clamp_top(maximun, x):
-    return min(maximun, x)
+def props(cls):
+    return [i for i in cls.__dict__.keys() if i[:1] != '_']
 
 
 def random_color(step=1):
@@ -48,13 +30,12 @@ def random_color(step=1):
 sysFont = pygame.font.SysFont("arial", 24)
 
 
-def drawText(screen: pygame.Surface, text: str, pos: tuple, font: pygame.Font = None,
-             antialias: bool = True, color: tuple = (255, 255, 255), background_color: tuple = None):
+def draw_text(screen: pygame.Surface, text: str, pos: tuple, font: pygame.Font = None,
+              antialias: bool = True, color: Color = Color(255, 255, 255), background_color: Color | None = None):
     if not font:
         font = sysFont
 
-    s = font.render(text, antialias, color, background_color)
-    screen.blit(s, pos)
+    screen.blit(font.render(text, antialias, color, background_color), pos)
 
 
 def hide_mouse(): pygame.mouse.set_visible(False)
@@ -68,26 +49,6 @@ def make_surface(size: tuple, color: tuple = None, color_key: tuple = None) -> p
     if color_key:
         s.set_colorkey(color)
     return s
-
-
-def cycle_sequence(arr: list | tuple) -> list | tuple:
-    first = arr[0]
-    arr[0] = arr[-1]
-    arr[-1] = first
-    return arr
-
-
-def flatten_list(l: list):
-    l_ = []
-    if not isinstance(l, list | tuple):
-        return []
-    else:
-        for i in l:
-            if isinstance(i, list | tuple):  # Check if element is a list
-                l_ += flatten_list(i)  # Recursively flatten nested list
-            else:
-                l_.append(i)
-    return l_
 
 
 def loadSound(path, volume=1):
@@ -155,17 +116,6 @@ def recolorSurface(img: Surface, newColor: Color) -> Surface:
 
     img_copy.set_colorkey((0, 0, 0))
     return img_copy
-
-
-def reverseInts(list_: list) -> list:
-    listCopy = []
-    for pos in list_:
-        if pos > 0:
-            listCopy.append(-pos)
-        else:
-            listCopy.append(pos * -1)
-
-    return listCopy
 
 
 def circle_surf(radius: float, color: Color) -> Surface:

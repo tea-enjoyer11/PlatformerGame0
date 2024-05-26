@@ -7,6 +7,10 @@ import pygame_gui
 import pygame_gui.ui_manager
 from typing import Iterable, Hashable, Optional, Callable, Sequence
 import random
+from Scripts.particles import ParticleGroup, ImageCache, CircleParticle, LeafParticle
+from Scripts.utils import load_image, draw_text
+from Scripts.utils_math import dist
+from Scripts.opengl_backend import Renderer
 
 RES = Vector2(800, 600)
 
@@ -14,145 +18,17 @@ RES = Vector2(800, 600)
 mainClock = pygame.time.Clock()
 pygame.init()
 pygame.font.init()
+# screen = pygame.display.set_mode(RES, pygame.OPENGL | pygame.DOUBLEBUF)
 screen = pygame.display.set_mode(RES, 0, 32)
 font = pygame.font.SysFont("arial", 21)
 
-TILESIZE = 16
+TILESIZE = 32
 CHUNKSIZE = 8
 CHUNKWIDTH = CHUNKSIZE * TILESIZE
 
 
-class ImageCache:
-    def __init__(self, make_image_func: Callable[[Hashable], pygame.Surface]):
-        self.cache: dict[Hashable, pygame.Surface] = {}
-        self.misses = 0
-        self.make_image = make_image_func
-
-    def get_image(self, item: Hashable) -> pygame.Surface:
-        if item not in self.cache:
-            self.misses += 1
-            self.cache[item] = self.make_image(item)
-        return self.cache[item]
-
-
-class Particle:
-    def update(self, dt: float, *args, **kwargs) -> bool:
-        """Return False when particle should be removed."""
-        return True
-
-    def draw_pos(self, image: pygame.Surface) -> Sequence[float]:
-        raise NotImplementedError
-
-    def cache_lookup(self) -> Hashable:
-        raise NotImplementedError
-
-
-class ParticleGroup:
-    def __init__(self, image_cache: ImageCache, blend: int = pygame.BLENDMODE_NONE,
-                 particles: Optional[list[Particle]] = None):
-        self.particles: list[Particle] = particles if particles is not None else []
-        self.image_cache = image_cache
-        self.blend = blend
-
-    def __len__(self):
-        return len(self.particles)
-
-    def add(self, particles: Particle | Iterable[Particle]):
-        if isinstance(particles, Particle):
-            self.particles.append(particles)
-        else:
-            self.particles.extend(particles)
-
-    def update(self, dt: float, *args, **kwargs):
-        self.particles = [p for p in self.particles if p.update(dt, *args, **kwargs)]
-
-    def _get_draw_tuple(self, p: Particle) -> tuple[pygame.Surface, Sequence[float]]:
-        image = self.image_cache.get_image(p.cache_lookup())
-        return image, p.draw_pos(image)
-
-    def _in_range(self, pos: tuple, boundary: tuple) -> bool:
-
-        return False
-
-    def draw(self, screen: pygame.Surface, blend: int = pygame.BLENDMODE_NONE):
-        screen.fblits([self._get_draw_tuple(p) for p in self.particles], blend if blend else self.blend)
-
-    def draw2(self, screen: pygame.Surface, blend: int = pygame.BLENDMODE_NONE):
-        # VIIEEEELLL ZU LANGSAM
-        arr = []
-        boundary = screen.get_size()
-        for p in self.particles:
-            draw_tuple = self._get_draw_tuple(p)
-            if draw_tuple[1][0] not in range(boundary[0]) or draw_tuple[1][1] not in range(boundary[1]):
-                arr.append(draw_tuple)
-        screen.fblits(arr, blend if blend else self.blend)
-
-
-class CircleParticle(Particle):
-    def __init__(self, pos: tuple, vel: tuple, max_imgs: int, type: str = "particle") -> None:
-        self.type = type
-        self.pos = pos
-        self.vel = vel
-        self.max_ints = max_imgs
-        self.state = 0  # which img to use right now?
-
-    def update(self, dt: float, *args, **kwargs) -> bool:
-        self.pos = (self.pos[0] + self.vel[0] * dt, self.pos[1] + self.vel[1] * dt)
-        self.state += dt * 10
-        if self.state > self.max_ints - 1:
-            return False
-        return True
-
-    def draw_pos(self, image: pygame.Surface) -> Sequence[float]:
-        # img benötigt um zu centern, falls gewollt
-        return self.pos
-
-    def cache_lookup(self) -> Hashable:
-        return f"assets/particles/{self.type}/{int(self.state)}.png"
-
-
-class LeafParticle(Particle):
-    def __init__(self, pos: tuple, vel: tuple, max_imgs: int, type: str = "leaf") -> None:
-        self.type = type
-        self.pos = pos
-        self.vel = vel
-        self.max_ints = max_imgs
-        self.state = 0  # which img to use right now?
-
-    def update(self, dt: float, *args, **kwargs) -> bool:
-        self.pos = (self.pos[0] + self.vel[0] * dt, self.pos[1] + self.vel[1] * dt)
-        self.state += dt * 10
-        if self.state > self.max_ints - 1:
-            return False
-        return True
-
-    def draw_pos(self, image: pygame.Surface) -> Sequence[float]:
-        # img benötigt um zu centern, falls gewollt
-        return self.pos
-
-    def cache_lookup(self) -> Hashable:
-        s = str(int(self.state))
-        if len(s) < 2:
-            s = "0" + s
-        return f"assets/particles/{self.type}/{s}.png"
-
-
-def load_image(path: str) -> Surface:
-    i = pygame.image.load(path).convert()
-    i.set_colorkey("black")
-    return i
-
-
-# IMGS = [load_image("assets/tile.png"), load_image("assets/ramp_left.png"), load_image("assets/ramp_right.png")]
-IMGS = [load_image("assets/tiles/grass/0.png"), load_image("assets/tiles/grass/3.png"), load_image("assets/tiles/grass/7.png")]
-
-
-def props(cls):
-    return [i for i in cls.__dict__.keys() if i[:1] != '_']
-
-
-def dist(p1: Vector2, p2: Vector2) -> float:
-    return ((p1.x - p2.x)**2 + (p1.y - p2.y)**2)**0.5
+IMGS = [load_image("assets/tile.png"), load_image("assets/ramp_left.png"), load_image("assets/ramp_right.png")]
+# IMGS = [load_image("assets/tiles/grass/0.png"), load_image("assets/tiles/grass/3.png"), load_image("assets/tiles/grass/7.png")]
 
 
 class TileType(Enum):
@@ -162,12 +38,11 @@ class TileType(Enum):
 
 
 class Tile:
-    __slots__ = ("pos", "color", "type", "img_idx")
+    __slots__ = ("pos", "type", "img_idx")
 
-    def __init__(self, color: Color, pos: Vector2, tile_type: TileType = TileType.TILE) -> None:
+    def __init__(self, pos: Vector2, tile_type: TileType = TileType.TILE) -> None:
         if not isinstance(pos, Vector2):
             pos = Vector2(pos)
-        self.color = color
         self.pos = pos
         self.type = tile_type
 
@@ -177,8 +52,8 @@ class Tile:
 class Ramp(Tile):
     __slots__ = ("elevation",)
 
-    def __init__(self, color: Color, pos: Vector2, tile_type: TileType, elevation: float = 1) -> None:  # angegeben in wie TILESIZE einheit
-        super().__init__(color, pos, tile_type)
+    def __init__(self, pos: Vector2, tile_type: TileType, elevation: float = 1) -> None:  # angegeben in wie TILESIZE einheit
+        super().__init__(pos, tile_type)
 
         self.elevation = elevation
 
@@ -479,14 +354,15 @@ class Player():
 
 
 # generate test map
-# tiles: list[Ramp | Tile] = [Tile("red", Vector2(0, 0)), Ramp('red', Vector2(3, 8), TileType.RAMP_RIGHT), Ramp('red', Vector2(5, 8), TileType.RAMP_RIGHT), Ramp('red', Vector2(7, 8), TileType.RAMP_LEFT, 0.5), Tile('red', Vector2(6, 8)), Tile('red', Vector2(4, 6)), Ramp('red', Vector2(4, 5), TileType.RAMP_LEFT), Tile('red', Vector2(3, 5)), Tile("red", Vector2(11, 8)), Tile("red", Vector2(14, 8)), Tile("red", Vector2(14, 7))]
-tiles: list[Ramp | Tile] = [Ramp("red", Vector2(2, 8), TileType.RAMP_RIGHT, 1), Ramp("red", Vector2(4, 8), TileType.RAMP_LEFT, 1), Ramp("red", Vector2(6, 8), TileType.RAMP_RIGHT, 0.5), Ramp("red", Vector2(8, 8), TileType.RAMP_LEFT, 0.5), Ramp("red", Vector2(10, 8), TileType.RAMP_RIGHT, 2), Ramp("red", Vector2(12, 8), TileType.RAMP_LEFT, 2)]
+# tiles: list[Ramp | Tile] = [Tile(Vector2(0, 0)), Ramp('red', Vector2(3, 8), TileType.RAMP_RIGHT), Ramp('red', Vector2(5, 8), TileType.RAMP_RIGHT), Ramp('red', Vector2(7, 8), TileType.RAMP_LEFT, 0.5), Tile('red', Vector2(6, 8)), Tile('red', Vector2(4, 6)), Ramp('red', Vector2(4, 5), TileType.RAMP_LEFT), Tile('red', Vector2(3, 5)), Tile(Vector2(11, 8)), Tile(Vector2(14, 8)), Tile(Vector2(14, 7))]
+tiles: list[Ramp | Tile] = [Ramp(Vector2(2, 8), TileType.RAMP_RIGHT, 1), Ramp(Vector2(4, 8), TileType.RAMP_LEFT, 1), Ramp(Vector2(6, 8), TileType.RAMP_RIGHT, 0.5), Ramp(Vector2(8, 8), TileType.RAMP_LEFT, 0.5), Ramp(Vector2(10, 8), TileType.RAMP_RIGHT, 2), Ramp(Vector2(12, 8), TileType.RAMP_LEFT, 2)]
 for i in range(16):
-    tiles.append(Tile('red', Vector2(i, 9)))
+    tiles.append(Tile(Vector2(i, 9)))
 # tiles = []
+tiles.append(Tile(Vector2(0, 0)))
 for x in range(-100, 100):
     for y in range(100):
-        tiles.append(Tile('red', Vector2(x, 10 + y)))
+        tiles.append(Tile(Vector2(x, 10 + y)))
 p = Player(Vector2(200, 500))
 
 right = False
@@ -509,6 +385,7 @@ tile_map.pre_render_chunks()
 img_cache = ImageCache(load_image)
 particle_group = ParticleGroup(img_cache)
 
+# renderer = Renderer()
 
 # region Slider setup
 gravity_slider = pygame_gui.elements.UIHorizontalSlider(relative_rect=pygame.Rect(210, 500, 500, 30),
@@ -544,7 +421,8 @@ jumpforce_lbl = pygame_gui.elements.ui_label.UILabel(pygame.Rect(10, 560, 90, 30
 # endregion
 
 # Loop ------------------------------------------------------- #
-while True:
+run = True
+while run:
     dt = mainClock.tick(0) * 0.001
     dt *= dt_multiplicator
 
@@ -583,81 +461,22 @@ while True:
 
     pygame.draw.rect(screen, p.color, Rect(Vector2(p.rect.topleft) - scroll, p.rect.size))
 
-    # Tiles -------------------------------------------------- #
-    # for t in tiles:
-    #     color = t.color
-    #     if t.type == TileType.TILE:
-    #         pass
-    #         pygame.draw.rect(screen, color, tile_rect(t))
-    #     elif t.type == TileType.RAMP_RIGHT:
-    #         """Skizze
-    #                       p3
-    #                     / |
-    #                   /   |
-    #                 /     |
-    #               /       |
-    #             /         |
-    #           /           |
-    #         p1 ---------- p2
-    #         """
-    #         elev = t.elevation
-    #         p1 = Vector2(t.pos.x * TILESIZE, (t.pos.y + 1) * TILESIZE)
-    #         p2 = Vector2((t.pos.x + 1) * TILESIZE, (t.pos.y + 1) * TILESIZE)
-    #         p3 = Vector2((t.pos.x + 1) * TILESIZE, (t.pos.y * TILESIZE) + TILESIZE - (TILESIZE * t.elevation))
-
-    #         pygame.draw.polygon(screen, color, [p1, p2, p3])
-
-    #         render_collision_mesh(screen, "white", t, 3)
-
-    #     elif t.type == TileType.RAMP_LEFT:
-    #         """Skizze
-    #         p3
-    #         | \
-    #         |   \
-    #         |     \
-    #         |       \
-    #         |         \
-    #         |           \
-    #         p1 ---------- p2
-    #         """
-    #         elev = t.elevation
-    #         p1 = Vector2(t.pos.x * TILESIZE, (t.pos.y + 1) * TILESIZE)
-    #         p2 = Vector2((t.pos.x + 1) * TILESIZE - 1, (t.pos.y + 1) * TILESIZE)  # -1 kann man eigentlich weglasse, nur mit siehts schöner aus. Irgendwie ist das ein bisschen länger als TILESIZE
-    #         p3 = Vector2(t.pos.x * TILESIZE, (t.pos.y * TILESIZE) + TILESIZE - (TILESIZE * t.elevation))
-
-    #         pygame.draw.polygon(screen, color, [p1, p2, p3])
-
-    #         render_collision_mesh(screen, "white", t, 3)
-
     tile_map.render(screen, p.pos, offset=scroll)
 
-    cols = font.render(f"{collisions}", True, "white")
-    lcols = font.render(f"{p._last_collision_types}", True, "white")
-    s = collisions == p._last_collision_types
-    cols_same = font.render(f"Are the last and current collisions the same: {s}", True, "white")
-    fps_surf = font.render(f"{mainClock.get_fps():.0f}", True, "white")
-    dt_surf = font.render(f"DT:{dt:.4f} DT multiplier:{dt_multiplicator:.4f}", True, "white")
-    playerinfo_surf = font.render(f"POS:{p.pos} NOCLIP: {noclip}", True, "white")
-    map_info_surf = font.render(f"TILEMAP:\nAmount of Chunks: {len(tile_map._chunks)}\nAmount of Tiles: {tile_map.amount_of_tiles}", True, "white")
-    particle_info_surf = font.render(f"PARTICLES:\nAmount of Particles: {len(particle_group)}", True, "white")
-    screen.blit(cols, (0, 0))
-    screen.blit(lcols, (0, 20))
-    screen.blit(cols_same, (0, 40))
-    screen.blit(dt_surf, (0, 80))
-    screen.blit(fps_surf, (500, 0))
-    screen.blit(playerinfo_surf, (500, 50))
-    screen.blit(map_info_surf, (500, 100))
-    screen.blit(particle_info_surf, (500, 200))
+    draw_text(screen, f"DT:{dt:.4f} DT multiplier:{dt_multiplicator:.4f}", (0, 80))
+    draw_text(screen, f"{mainClock.get_fps():.0f}", (500, 0))
+    draw_text(screen, f"POS:{p.pos} NOCLIP: {noclip}", (500, 50))
+    draw_text(screen, f"TILEMAP:\nAmount of Chunks: {len(tile_map._chunks)}\nAmount of Tiles: {tile_map.amount_of_tiles}", (500, 100))
+    draw_text(screen, f"PARTICLES:\nAmount of Particles: {len(particle_group)}", (500, 200))
+    draw_text(screen, f"{collisions}", (0, 0), font=font)
+    draw_text(screen, f"{p._last_collision_types}", (0, 20))
+    draw_text(screen, f"Are the last and current collisions the same: {collisions == p._last_collision_types}", (0, 40))
 
     # Buttons ------------------------------------------------ #
     for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            pygame.quit()
-            sys.exit()
+        if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
+            run = False
         if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_ESCAPE:
-                pygame.quit()
-                sys.exit()
             if event.key == pygame.K_d:
                 right = True
             if event.key == pygame.K_a:
@@ -670,6 +489,7 @@ while True:
                 p.vertical_momentum = -jumpforce
             if event.key == pygame.K_TAB:
                 noclip = not noclip
+                p.vertical_momentum = 0
             if event.key == pygame.K_UP:
                 dt_multiplicator = min(5, dt_multiplicator + 0.5)
             if event.key == pygame.K_DOWN:
@@ -751,4 +571,9 @@ while True:
     pygame_gui_manager.draw_ui(screen)
 
     # Update ------------------------------------------------- #
-    pygame.display.update()
+    # renderer.render(screen)
+    # renderer.render_particles(particle_group.particles)
+    pygame.display.flip()
+# renderer.quit()
+pygame.quit()
+sys.exit()
