@@ -12,6 +12,7 @@ from Scripts.utils import load_image, draw_text
 from Scripts.utils_math import dist
 from Scripts.opengl_backend import Renderer
 
+
 RES = Vector2(800, 600)
 
 
@@ -53,6 +54,9 @@ class Tile:
 
         self.img_idx = 0
 
+    # def __repr__(self) -> str:
+    #     return f"<{self.pos=}, {self.type=}, {self.img_idx=}>"
+
 
 class Ramp(Tile):
     __slots__ = ("elevation",)
@@ -71,14 +75,12 @@ class Ramp(Tile):
             if self.img_idx not in IMGS:
                 IMGS[self.img_idx] = pygame.transform.scale(IMGS[2], (TILESIZE, TILESIZE * elevation))
 
-
-class JustRenderRamp(Ramp):
-    def __init__(self, pos: Vector2, tile_type: TileType, elevation: float = 1) -> None:
-        super().__init__(pos, tile_type, elevation)
+    # def __repr__(self) -> str:
+    #     return f"<{self.pos=}, {self.type=}, {self.img_idx=}, {self.elevation=}>"
 
 
 class Chunk:
-    __slots__ = ("pos", "size", "_tiles", "_pre_renderd_surf")
+    __slots__ = ("pos", "size", "_tiles", "_pre_renderd_surf", "pre_render_offset")
 
     def __init__(self, pos: Vector2, size) -> None:
         self.pos = pos
@@ -86,6 +88,7 @@ class Chunk:
         self._tiles: dict[tuple, Tile] = {}
 
         self._pre_renderd_surf: Surface = None
+        self.pre_render_offset = Vector2(0)
 
     def get(self, pos: tuple) -> Tile | None:
         if pos in self._tiles:
@@ -107,27 +110,64 @@ class Chunk:
             pos = (pos[0] % CHUNKSIZE, pos[1] % CHUNKSIZE)
             self._tiles[pos] = tile
 
+    def _tile_is_on_edge(self, tile: Tile | Ramp) -> bool:
+        x, y = tile.pos.x % CHUNKSIZE, tile.pos.y % CHUNKSIZE
+        left_right = (x == 0 or x == self.size[0]) and 0 <= y <= self.size[1]
+        top_bottom = (y == 0 or y == self.size[1]) and 0 <= x <= self.size[0]
+        print(tile, left_right, top_bottom, self.pos, self.size)
+        if left_right:
+            return left_right
+        if top_bottom:
+            return top_bottom
+        return False
+
     def pre_render(self):
+        l = []
+        global_tile_offset = Vector2(0)
+
+        ramps, tiles = [], []
+        for _, tile in self._tiles.items():
+            if tile.type in [TileType.RAMP_LEFT, TileType.RAMP_RIGHT]:
+                ramps.append(tile)
+            else:
+                tiles.append(tile)
+
+        for ramp in sorted(ramps, key=lambda r: r.elevation, reverse=True):
+            on_edge = self._tile_is_on_edge(ramp)
+            offset_y = TILESIZE * ramp.elevation - TILESIZE
+            local_pos = (ramp.pos.x % CHUNKSIZE, ramp.pos.y % CHUNKSIZE)
+            if ramp.elevation > 1 and on_edge:
+                if global_tile_offset.y < offset_y:
+                    global_tile_offset.y = offset_y
+            local_pos = (local_pos[0] * TILESIZE, local_pos[1] * TILESIZE + global_tile_offset.y - offset_y)
+            l.append((IMGS[ramp.img_idx], local_pos))
+
+        for tile in tiles:
+            local_pos = (tile.pos.x % CHUNKSIZE, tile.pos.y % CHUNKSIZE)
+            local_pos = (local_pos[0] * TILESIZE, local_pos[1] * TILESIZE + global_tile_offset.y)
+            l.append((IMGS[tile.img_idx], local_pos))
+
+        # ! Naive approach
+        # for local_pos, tile in self._tiles.items():
+        #     offset = 0
+        #     if tile.type in [TileType.RAMP_LEFT, TileType.RAMP_RIGHT]:
+        #         offset = TILESIZE * tile.elevation - TILESIZE
+        #     local_pos = (local_pos[0] * TILESIZE, local_pos[1] * TILESIZE - offset)
+        #     l.append((IMGS[tile.img_idx], local_pos))
+
         w, h = self.size[0] * TILESIZE, self.size[1] * TILESIZE
-        surf = Surface((w, h))
+        surf = Surface((w + global_tile_offset.x, h + global_tile_offset.y))
         surf.set_colorkey("black")
 
-        l = []
-        for local_pos, tile in self._tiles.items():
-            offset = 0
-            if tile.type in [TileType.RAMP_LEFT, TileType.RAMP_RIGHT]:
-                offset = TILESIZE * tile.elevation - TILESIZE
-            local_pos = (local_pos[0] * TILESIZE, local_pos[1] * TILESIZE - offset)
-            l.append((IMGS[tile.img_idx], local_pos))
-        # l = [(IMGS[tile.img_idx], (local_pos[0] * TILESIZE, local_pos[1] * TILESIZE)) for local_pos, tile in self._tiles.items()]
         surf.fblits(l)
 
         self._pre_renderd_surf = surf
+        self.pre_render_offset = global_tile_offset
 
     def get_pre_render(self, offset: Vector2 = Vector2(0)) -> tuple[Surface, tuple]:
         global_pos = tuple(self.pos)
         global_pos = (global_pos[0] * self.size[0] * TILESIZE - offset[0], global_pos[1] * self.size[1] * TILESIZE - offset[1])
-        return (self._pre_renderd_surf, global_pos)
+        return (self._pre_renderd_surf, global_pos - self.pre_render_offset)
 
 
 class TileMap:
@@ -377,8 +417,8 @@ for i in range(16):
     tiles.append(Tile(Vector2(i, 9)))
 # tiles = []
 tiles.append(Tile(Vector2(0, 0)))
-for x in range(-100, 100):
-    for y in range(100):
+for x in range(-16, 16):
+    for y in range(16):
         tiles.append(Tile(Vector2(x, 10 + y)))
 p = Player(Vector2(200, 500))
 
