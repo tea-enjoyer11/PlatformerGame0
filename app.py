@@ -80,7 +80,8 @@ class Ramp(Tile):
 
 
 class Chunk:
-    __slots__ = ("pos", "size", "_tiles", "_pre_renderd_surf", "pre_render_offset")
+    __slots__ = ("pos", "size", "_tiles", "_pre_renderd_surf", "_pre_renderd_surf_size", "pre_render_offset")
+    default_pre_renderd_surf_size = Vector2(CHUNKSIZE * TILESIZE, CHUNKSIZE * TILESIZE)
 
     def __init__(self, pos: Vector2, size) -> None:
         self.pos = pos
@@ -88,6 +89,7 @@ class Chunk:
         self._tiles: dict[tuple, Tile] = {}
 
         self._pre_renderd_surf: Surface = None
+        self._pre_renderd_surf_size: Vector2 = None
         self.pre_render_offset = Vector2(0)
 
     def get(self, pos: tuple) -> Tile | None:
@@ -114,7 +116,6 @@ class Chunk:
         x, y = tile.pos.x % CHUNKSIZE, tile.pos.y % CHUNKSIZE
         left_right = (x == 0 or x == self.size[0]) and 0 <= y <= self.size[1]
         top_bottom = (y == 0 or y == self.size[1]) and 0 <= x <= self.size[0]
-        print(tile, left_right, top_bottom, self.pos, self.size)
         if left_right:
             return left_right
         if top_bottom:
@@ -125,6 +126,7 @@ class Chunk:
         l = []
         global_tile_offset = Vector2(0)
 
+        # ! Smart approach
         ramps, tiles = [], []
         for _, tile in self._tiles.items():
             if tile.type in [TileType.RAMP_LEFT, TileType.RAMP_RIGHT]:
@@ -162,12 +164,42 @@ class Chunk:
         surf.fblits(l)
 
         self._pre_renderd_surf = surf
+        self._pre_renderd_surf_size = Vector2(surf.get_size())
         self.pre_render_offset = global_tile_offset
 
     def get_pre_render(self, offset: Vector2 = Vector2(0)) -> tuple[Surface, tuple]:
         global_pos = tuple(self.pos)
         global_pos = (global_pos[0] * self.size[0] * TILESIZE - offset[0], global_pos[1] * self.size[1] * TILESIZE - offset[1])
         return (self._pre_renderd_surf, global_pos - self.pre_render_offset)
+
+
+def on_edge_of_chunk(pos: Vector2) -> list[bool]:
+    """_summary_
+    No need to convert `pos` to a 'Chunk' position. This method does this automatically!
+
+    Args:
+        pos (Vector2): position to check
+
+    Returns:
+        list[bool]: [on_top_edge, on_right_edge, on_bottom_edge, on_left_edge]
+    """
+    x, y = pos.x / TILESIZE % CHUNKSIZE, pos.y / TILESIZE % CHUNKSIZE
+    # x, y = int(x), int(y)
+    # print(x, y)
+
+    edge_radius = 2.5
+
+    top = right = bottom = left = False
+    if 0 <= y <= edge_radius:
+        top = True
+    if CHUNKSIZE - edge_radius <= y <= CHUNKSIZE:
+        bottom = True
+    if 0 <= x <= edge_radius:
+        left = True
+    if CHUNKSIZE - edge_radius <= x <= CHUNKSIZE:
+        right = True
+
+    return [top, right, bottom, left]
 
 
 class TileMap:
@@ -215,20 +247,66 @@ class TileMap:
             return self._tiles[pos]
 
     def get_around(self, pos: Vector2, range: float) -> list[Tile]:
-        related_chunk_pos = Vector2(pos.x / TILESIZE // self.chunk_size[0], pos.y / TILESIZE // self.chunk_size[1])
+        related_chunk_pos = Vector2(pos.x // TILESIZE // self.chunk_size[0], pos.y // TILESIZE // self.chunk_size[1])
         # print("related chunk position:", related_chunk_pos, pos)
         ret = []
-        neighbors = [Vector2(0.0, 0.0), Vector2(-1.0, 0.0), Vector2(1.0, 0.0), Vector2(0.0, -1.0), Vector2(0.0, 1.0)]
-        for offset in neighbors:
-            chunk_pos = related_chunk_pos + offset
-            if tuple(chunk_pos) in self._chunks:
-                # print(chunk_pos, "is in check radius")
-                tiles = self._chunks[tuple(chunk_pos)].get_all()
-                ret += tiles
+        neighbors = [Vector2(0.0, 0.0), Vector2(-1.0, 0.0), Vector2(1.0, 0.0), Vector2(0.0, -1.0), Vector2(0.0, 1.0), Vector2(-1, -1), Vector2(1, 1), Vector2(-1, 1), Vector2(1, -1)]
+
+        # ! New approach
+        on_edges = on_edge_of_chunk(pos)
+        if not bool(sum(on_edges)):
+            if tuple(related_chunk_pos) in self._chunks:
+                ret = self._chunks[tuple(related_chunk_pos)].get_all()
+        else:
+            if on_edges[0]:  # top
+                rel_chunk = tuple(related_chunk_pos + Vector2(0, -1))
+                if rel_chunk in self._chunks:
+                    ret += self._chunks[rel_chunk].get_all()
+            if on_edges[1]:  # right
+                rel_chunk = tuple(related_chunk_pos + Vector2(1, 0))
+                if rel_chunk in self._chunks:
+                    ret += self._chunks[rel_chunk].get_all()
+            if on_edges[2]:  # bottom
+                rel_chunk = tuple(related_chunk_pos + Vector2(0, 1))
+                if rel_chunk in self._chunks:
+                    ret += self._chunks[rel_chunk].get_all()
+            if on_edges[3]:  # left
+                rel_chunk = tuple(related_chunk_pos + Vector2(-1, 0))
+                if rel_chunk in self._chunks:
+                    ret += self._chunks[rel_chunk].get_all()
+            if on_edges[1] and on_edges[2]:
+                rel_chunk = tuple(related_chunk_pos + Vector2(1, 1))
+                if rel_chunk in self._chunks:
+                    ret += self._chunks[rel_chunk].get_all()
+            if on_edges[3] and on_edges[2]:
+                rel_chunk = tuple(related_chunk_pos + Vector2(-1, 1))
+                if rel_chunk in self._chunks:
+                    ret += self._chunks[rel_chunk].get_all()
+            if on_edges[3] and on_edges[0]:
+                rel_chunk = tuple(related_chunk_pos + Vector2(-1, -1))
+                if rel_chunk in self._chunks:
+                    ret += self._chunks[rel_chunk].get_all()
+            if on_edges[1] and on_edges[0]:
+                rel_chunk = tuple(related_chunk_pos + Vector2(1, -1))
+                if rel_chunk in self._chunks:
+                    ret += self._chunks[rel_chunk].get_all()
+        if tuple(related_chunk_pos) in self._chunks:
+            ret += self._chunks[tuple(related_chunk_pos)].get_all()
+
+        # ! Old approach
+        # for offset in neighbors:
+        #     chunk_pos = related_chunk_pos + offset
+        #     if tuple(chunk_pos) in self._chunks:
+        #         # print(chunk_pos, "is in check radius")
+        #         tiles = self._chunks[tuple(chunk_pos)].get_all()
+        #         ret += tiles
         return ret
 
     def get_all(self) -> list[Tile]:
-        return [chunk.get_all() for chunk in self._chunks]
+        r = []
+        for _, chunk in self._chunks.items():
+            r += chunk.get_all()
+        return r
 
     def render(self, surf: Surface, target_pos: Vector2, offset: Vector2 = Vector2(0)) -> None:
         target_pos = (target_pos[0] / TILESIZE // self.chunk_size[0], target_pos[1] / TILESIZE // self.chunk_size[1])
@@ -247,7 +325,10 @@ class TileMap:
         for y in range(p1[1], p2[1] + 1):
             for x in range(p1[0], p2[0] + 1):
                 if (x, y) in self._chunks:
-                    pygame.draw.rect(surf, "red", Rect(x * CHUNKWIDTH - offset[0], y * CHUNKWIDTH - offset[1], TILESIZE * CHUNKSIZE, TILESIZE * CHUNKSIZE), 1)
+                    chunk = self._chunks[(x, y)]
+                    if chunk._pre_renderd_surf_size != Chunk.default_pre_renderd_surf_size:
+                        pygame.draw.rect(surf, "blue", Rect(x * CHUNKWIDTH - offset[0] - chunk.pre_render_offset.x, y * CHUNKWIDTH - offset[1] - chunk.pre_render_offset.y, TILESIZE * CHUNKSIZE + chunk.pre_render_offset.x, TILESIZE * CHUNKSIZE + chunk.pre_render_offset.y), 4)
+                    pygame.draw.rect(surf, "red", Rect(x * CHUNKWIDTH - offset[0], y * CHUNKWIDTH - offset[1], TILESIZE * CHUNKSIZE, TILESIZE * CHUNKSIZE), 2)
 
 
 def collision_test(object_1: Rect, object_list: list[Rect]) -> list[Rect]:
@@ -258,27 +339,27 @@ def collision_test(object_1: Rect, object_list: list[Rect]) -> list[Rect]:
     return collision_list
 
 
-def tile_rect(t: Tile | Ramp) -> Rect:
+def tile_rect(t: Tile | Ramp, offset: Vector2 = Vector2(0)) -> Rect:
     if isinstance(t, Ramp):
-        x = t.pos.x * TILESIZE
-        y = (t.pos.y * TILESIZE) + TILESIZE - (TILESIZE * t.elevation)
+        x = t.pos.x * TILESIZE - offset.x
+        y = (t.pos.y * TILESIZE) + TILESIZE - (TILESIZE * t.elevation) - offset.y
         w = TILESIZE
         h = TILESIZE * t.elevation
         return Rect(x, y, w, h)
     else:  # isinstance(t, Tile)
-        return Rect(t.pos.x * TILESIZE, t.pos.y * TILESIZE, TILESIZE, TILESIZE)
+        return Rect(t.pos.x * TILESIZE - offset.x, t.pos.y * TILESIZE - offset.y, TILESIZE, TILESIZE)
 
 
-def render_collision_mesh(surf: Surface, color: Color, t: Tile | Ramp, width: int = 1) -> None:
+def render_collision_mesh(surf: Surface, color: Color, t: Tile | Ramp, width: int = 1, offset: Vector2 = Vector2(0)) -> None:
     if isinstance(t, Ramp):
-        r = tile_rect(t)
+        r = tile_rect(t, offset=offset)
         p1, p2 = r.bottomleft, r.topright
         if t.type == TileType.RAMP_LEFT:
             p1, p2 = r.bottomright, r.topleft
         pygame.draw.rect(surf, color, r, width)
         pygame.draw.line(surf, color, p1, p2, width)
     else:  # isinstance(t, Tile)
-        r = tile_rect(t)
+        r = tile_rect(t, offset=offset)
         pygame.draw.rect(surf, color, r, width)
 
 
@@ -516,9 +597,11 @@ while run:
     if (collisions['bottom']) or (collisions['top']) and not noclip:
         p.vertical_momentum = 0
 
+    tile_map.render(screen, p.pos, offset=scroll)
     pygame.draw.rect(screen, p.color, Rect(Vector2(p.rect.topleft) - scroll, p.rect.size))
 
-    tile_map.render(screen, p.pos, offset=scroll)
+    for tile in close_tiles:
+        render_collision_mesh(screen, "yellow", tile, offset=scroll)
 
     draw_text(screen, f"DT:{dt:.4f} DT multiplier:{dt_multiplicator:.4f}", (0, 80))
     draw_text(screen, f"{mainClock.get_fps():.0f}", (500, 0))
