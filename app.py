@@ -10,6 +10,7 @@ import random
 from Scripts.particles import ParticleGroup, ImageCache, CircleParticle, LeafParticle
 from Scripts.utils import load_image, draw_text
 from Scripts.utils_math import dist
+# from Scripts.opengl_backend_moderngl import Renderer
 from Scripts.opengl_backend import Renderer
 
 
@@ -19,8 +20,8 @@ RES = Vector2(800, 600)
 mainClock = pygame.time.Clock()
 pygame.init()
 pygame.font.init()
-# screen = pygame.display.set_mode(RES, pygame.OPENGL | pygame.DOUBLEBUF)
-screen = pygame.display.set_mode(RES, 0, 32)
+screen = pygame.display.set_mode(RES, pygame.OPENGL | pygame.DOUBLEBUF)
+# screen = pygame.display.set_mode(RES, 0, 32)
 font = pygame.font.SysFont("arial", 21)
 
 TILESIZE = 32
@@ -99,6 +100,23 @@ class Chunk:
 
     def get_all(self) -> list[Tile]:
         return list(self._tiles.values())
+
+    def get_in_range(self, pos: Vector2, radius: float) -> list[Tile | Ramp]:
+
+        # !!! ARSCH LANGSAM !!!
+
+        ret: list[Tile | Ramp] = []
+
+        x, y = pos.x // TILESIZE % CHUNKSIZE, pos.y // TILESIZE % CHUNKSIZE
+
+        for _y in range(-radius, radius):
+            for _x in range(-radius, radius):
+                p = (int(x + _x), int(y + _y))
+                if p in self._tiles:
+                    ret.append(self._tiles[p])
+                    print((x, y), p)
+
+        return ret
 
     def add(self, tile: Tile) -> None:
         pos = tuple(tile.pos)
@@ -254,44 +272,39 @@ class TileMap:
 
         # ! New approach
         on_edges = on_edge_of_chunk(pos)
-        if not bool(sum(on_edges)):
-            if tuple(related_chunk_pos) in self._chunks:
-                ret = self._chunks[tuple(related_chunk_pos)].get_all()
-        else:
-            if on_edges[0]:  # top
-                rel_chunk = tuple(related_chunk_pos + Vector2(0, -1))
-                if rel_chunk in self._chunks:
-                    ret += self._chunks[rel_chunk].get_all()
-            if on_edges[1]:  # right
-                rel_chunk = tuple(related_chunk_pos + Vector2(1, 0))
-                if rel_chunk in self._chunks:
-                    ret += self._chunks[rel_chunk].get_all()
-            if on_edges[2]:  # bottom
-                rel_chunk = tuple(related_chunk_pos + Vector2(0, 1))
-                if rel_chunk in self._chunks:
-                    ret += self._chunks[rel_chunk].get_all()
-            if on_edges[3]:  # left
-                rel_chunk = tuple(related_chunk_pos + Vector2(-1, 0))
-                if rel_chunk in self._chunks:
-                    ret += self._chunks[rel_chunk].get_all()
-            if on_edges[1] and on_edges[2]:
-                rel_chunk = tuple(related_chunk_pos + Vector2(1, 1))
-                if rel_chunk in self._chunks:
-                    ret += self._chunks[rel_chunk].get_all()
-            if on_edges[3] and on_edges[2]:
-                rel_chunk = tuple(related_chunk_pos + Vector2(-1, 1))
-                if rel_chunk in self._chunks:
-                    ret += self._chunks[rel_chunk].get_all()
-            if on_edges[3] and on_edges[0]:
-                rel_chunk = tuple(related_chunk_pos + Vector2(-1, -1))
-                if rel_chunk in self._chunks:
-                    ret += self._chunks[rel_chunk].get_all()
-            if on_edges[1] and on_edges[0]:
-                rel_chunk = tuple(related_chunk_pos + Vector2(1, -1))
-                if rel_chunk in self._chunks:
-                    ret += self._chunks[rel_chunk].get_all()
+        neighbor_positions = [  # Define the relative positions for each possible neighbor
+            (0, -1),  # top
+            (1, 0),   # right
+            (0, 1),   # bottom
+            (-1, 0),  # left
+            (1, -1),  # top-right
+            (1, 1),   # bottom-right
+            (-1, 1),  # bottom-left
+            (-1, -1)  # top-left
+        ]
+        neighbor_conditions = [  # Define the conditions for each neighbor based on the `on_edges` list
+            (0,),     # top
+            (1,),     # right
+            (2,),     # bottom
+            (3,),     # left
+            (0, 1),   # top-right
+            (1, 2),   # bottom-right
+            (2, 3),   # bottom-left
+            (0, 3)    # top-left
+        ]
+        processed_chunks = set()  # to keep track of processed chunks
+
         if tuple(related_chunk_pos) in self._chunks:
             ret += self._chunks[tuple(related_chunk_pos)].get_all()
+
+        # Iterate over each possible neighbor and its conditions
+        for pos, conditions in zip(neighbor_positions, neighbor_conditions):
+            if all(on_edges[c] for c in conditions):  # Check if all conditions are met
+                rel_chunk = tuple(related_chunk_pos + Vector2(*pos))
+                if rel_chunk not in processed_chunks:  # Check if the chunk has not been processed yet
+                    if rel_chunk in self._chunks:
+                        ret += self._chunks[rel_chunk].get_all()
+                    processed_chunks.add(rel_chunk)  # Mark the chunk as processed
 
         # ! Old approach
         # for offset in neighbors:
@@ -523,7 +536,7 @@ tile_map.pre_render_chunks()
 img_cache = ImageCache(load_image)
 particle_group = ParticleGroup(img_cache)
 
-# renderer = Renderer()
+renderer = Renderer()
 
 # region Slider setup
 gravity_slider = pygame_gui.elements.UIHorizontalSlider(relative_rect=pygame.Rect(210, 500, 500, 30),
@@ -537,7 +550,7 @@ gravity_lbl = pygame_gui.elements.ui_label.UILabel(pygame.Rect(10, 500, 90, 30),
                                                    "Gravity",
                                                    pygame_gui_manager)
 max_gravity_slider = pygame_gui.elements.UIHorizontalSlider(relative_rect=pygame.Rect(210, 530, 500, 30),
-                                                            start_value=50,
+                                                            start_value=max_gravity,
                                                             value_range=(100, 2500),
                                                             manager=pygame_gui_manager)
 max_gravity_lbl = pygame_gui.elements.ui_label.UILabel(pygame.Rect(10, 530, 90, 30),
@@ -710,10 +723,12 @@ while run:
     pygame_gui_manager.update(dt)
     pygame_gui_manager.draw_ui(screen)
 
+    renderer.render(screen)
+
     # Update ------------------------------------------------- #
     # renderer.render(screen)
     # renderer.render_particles(particle_group.particles)
-    pygame.display.flip()
+    # pygame.display.flip()
 # renderer.quit()
 pygame.quit()
 sys.exit()
