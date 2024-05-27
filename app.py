@@ -29,6 +29,11 @@ CHUNKWIDTH = CHUNKSIZE * TILESIZE
 
 IMGS = [load_image("assets/tile.png"), load_image("assets/ramp_left.png"), load_image("assets/ramp_right.png")]
 # IMGS = [load_image("assets/tiles/grass/0.png"), load_image("assets/tiles/grass/3.png"), load_image("assets/tiles/grass/7.png")]
+IMGS = {
+    0: load_image("assets/tile.png"),
+    1: load_image("assets/ramp_left.png"),
+    2: load_image("assets/ramp_right.png")
+}
 
 
 class TileType(Enum):
@@ -58,9 +63,18 @@ class Ramp(Tile):
         self.elevation = elevation
 
         if self.type == TileType.RAMP_LEFT:
-            self.img_idx = 1
+            self.img_idx = f"LEFT{elevation}"
+            if self.img_idx not in IMGS:
+                IMGS[self.img_idx] = pygame.transform.scale(IMGS[1], (TILESIZE, TILESIZE * elevation))
         else:
-            self.img_idx = 2
+            self.img_idx = f"RIGHT{elevation}"
+            if self.img_idx not in IMGS:
+                IMGS[self.img_idx] = pygame.transform.scale(IMGS[2], (TILESIZE, TILESIZE * elevation))
+
+
+class JustRenderRamp(Ramp):
+    def __init__(self, pos: Vector2, tile_type: TileType, elevation: float = 1) -> None:
+        super().__init__(pos, tile_type, elevation)
 
 
 class Chunk:
@@ -98,11 +112,14 @@ class Chunk:
         surf = Surface((w, h))
         surf.set_colorkey("black")
 
-        # l = []
-        # for local_pos, tile in self._tiles.items():
-        #     local_pos = (local_pos[0] * TILESIZE, local_pos[1] * TILESIZE)
-        #     l.append((IMGS[tile.img_idx], local_pos))
-        l = [(IMGS[tile.img_idx], (local_pos[0] * TILESIZE, local_pos[1] * TILESIZE)) for local_pos, tile in self._tiles.items()]
+        l = []
+        for local_pos, tile in self._tiles.items():
+            offset = 0
+            if tile.type in [TileType.RAMP_LEFT, TileType.RAMP_RIGHT]:
+                offset = TILESIZE * tile.elevation - TILESIZE
+            local_pos = (local_pos[0] * TILESIZE, local_pos[1] * TILESIZE - offset)
+            l.append((IMGS[tile.img_idx], local_pos))
+        # l = [(IMGS[tile.img_idx], (local_pos[0] * TILESIZE, local_pos[1] * TILESIZE)) for local_pos, tile in self._tiles.items()]
         surf.fblits(l)
 
         self._pre_renderd_surf = surf
