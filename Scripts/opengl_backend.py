@@ -14,13 +14,13 @@ SCREEN_SIZE = Vector2(800, 600)
 
 vertex_shader = """#version 330 core
 
-in vec2 vert;
+in vec2 aPos;
 in vec2 texcoords;
 out vec2 uvs;
 
 void main() {
     uvs = texcoords;
-    gl_Position = vec4(vert, 0.0, 1.0);
+    gl_Position = vec4(aPos, 0.0, 1.0);
 }
 """
 
@@ -32,7 +32,10 @@ in vec2 uvs;
 out vec4 f_color;
 
 void main() {
-    f_color = vec4(texture(tex, uvs).rgb,1.0);
+    f_color = vec4(uvs, 0.63, 1.0);
+    f_color = vec4(uvs, 0.0, 1.0);
+    vec2 flipped_uv = vec2(uvs.x, uvs.y * -1);
+    f_color = vec4(texture(tex, flipped_uv).rgb,1.0);
 }
 """
 
@@ -61,24 +64,57 @@ def create_shader(vertex_file_path: str, fragment_file_path: str) -> ShaderProgr
 
 def make_quad(pos: Vector2, size: Vector2) -> np.array:
     x, y = pos.x, pos.y
-    half_width = (size.x / SCREEN_SIZE.x) * 2 / 2
-    half_height = (size.y / SCREEN_SIZE.y) * 2 / 2
+    w, h = size.x, size.y
+
+    ndc_x = (x / SCREEN_SIZE.x) * 2 - 1
+    ndc_y = (y / SCREEN_SIZE.y) * 2 - 1
+    ndc_width = (w / SCREEN_SIZE.x) * 2
+    ndc_height = (h / SCREEN_SIZE.y) * 2
 
     quad_buffer = np.array(
         object=[
-            # x, y, z, s, t
-            -0.5, 0.5, 0.0, 0.0, 0.0,
-            0.5, 0.5, 0.0, 1.0, 0.0,
-            0.5, -0.5, 0.0, 0.0, 1.0,
-            -0.5, -0.5, 0.0, 1.0, 1.0
+            # x, y, s, t
+            ndc_x, ndc_y + ndc_height, 0.0, 1.0,  # top left
+            ndc_x + ndc_width, ndc_y, 1.0, 0.0,  # bottom right
+            ndc_x, ndc_y, 0.0, 0.0,  # bottom left
+
+            ndc_x, ndc_y + ndc_height, 0.0, 1.0,  # top left
+            ndc_x + ndc_width, ndc_y, 1.0, 0.0,  # bottom right
+            ndc_x + ndc_width, ndc_y + ndc_height, 1.0, 1.0,  # top right
+            # -1.0, 1.0, 0.0, 1.0,
+            # 1.0, -1.0, 1.0, 0.0,
+            # -1.0, -1.0, 0.0, 0.0,
+
+            # -1.0, -1.0, 0.0, 1.0,
+            # 1.0, 1.0, 1.0, 0.0,
+            # 1.0, 1.0, 1.0, 1.0
+
+            # -1.0, 0.5, 0.0, 0.0,
+            # 0.5, 0.5, 1.0, 0.0,
+            # 0.5, -0.5, 0.0, 1.0,
+            # -0.5, -0.5, 1.0, 1.0
+            # 0.5, 0.5, 0.0, 1.0,  # top right
+            # 0.5, -0.5, 0.0, 0.0,  # bottom right
+            # -0.5, -0.5, 0.0, 1.0,  # bottom left
+            # -0.5, 0.5, 1.0, 1.0  # top left
         ],
         dtype=np.float32
     )
-    return quad_buffer
+    print(quad_buffer)
+    indices = np.array(
+        [
+            0, 1, 3,
+            1, 2, 3
+        ],
+        dtype=np.float32
+    )
+    return quad_buffer, indices
 
 
 class Renderer:
     def __init__(self) -> None:
+        glViewport(-int(SCREEN_SIZE.x) // 4, -int(SCREEN_SIZE.y) // 4, int(SCREEN_SIZE.x), int(SCREEN_SIZE.y))
+
         glClearColor(0.1, 0.2, 0.2, 1)
 
         self.screen = RectMesh(Vector2(0, 0), SCREEN_SIZE)  # nicht der eigentliche screen, sonder das mesh für den screen
@@ -89,18 +125,21 @@ class Renderer:
     def render(self, surface: Surface) -> None:
         glClear(GL_COLOR_BUFFER_BIT)
 
+        # t = Texture("assets/background.png")
+        t = TextureSurface(surface, SCREEN_SIZE)
+
         self.shader.use()
-        t = Texture("assets/background.png")
         t.use()
-        glUniform1i(glGetUniformLocation(self.shader.program, "tex"), t.texture)
+        # glUniform1i(glGetUniformLocation(self.shader.program, "tex"), self.t.texture)
         self.screen.bind()
         self.screen.draw()
         pygame.display.flip()
+        # print(vars(t))
         t.destroy()
 
 
 class Texture:
-    def __init__(self, filepath: str) -> None:
+    def __init__(self, filepath: str, size: Vector2 | None = None) -> None:
         self.texture = glGenTextures(1)  # make space in memory for texture
         glBindTexture(GL_TEXTURE_2D, self.texture)  # binding that as our current texture
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT)  # s=0: left side, s=1 right side of texture
@@ -108,7 +147,10 @@ class Texture:
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)  # minifiying texture (downscaling)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)  # magnifiying texture (upscaling)
         with Image.open(filepath, "r") as image:
-            image_width, image_height = image.size
+            if size:
+                image_width, image_height = image.size
+            else:
+                image_width, image_height = size.x, size.y
             image = image.convert("RGBA")
             image_data = image.tobytes()
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image_width, image_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image_data)
@@ -123,7 +165,7 @@ class Texture:
 
 
 class TextureSurface:
-    def __init__(self, surface: Surface) -> None:
+    def __init__(self, surface: Surface, size: Vector2 | None = None) -> None:
         self.texture = glGenTextures(1)
 
         raw_surface = pygame.image.tostring(surface, "RGBA")
@@ -135,7 +177,11 @@ class TextureSurface:
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
 
         surface_rect = surface.get_rect()
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, surface_rect.width, surface_rect.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, raw_surface)
+        if size:
+            image_width, image_height = surface_rect.w, surface_rect.h
+        else:
+            image_width, image_height = size.x, size.y
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image_width, image_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, raw_surface)
         glGenerateMipmap(GL_TEXTURE_2D)
 
     def use(self):
@@ -153,13 +199,13 @@ class Mesh:
         self.vbo = glGenBuffers(1)
         glBindBuffer(GL_ARRAY_BUFFER, self.vbo)
 
-        stride = 4 * 5
+        stride = 4 * 4  # bytes per vertex. Here its 4 floats (a float = 4 bytes)
         offset = 0
 
         # position
         glEnableVertexAttribArray(0)
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, stride, ctypes.c_void_p(offset))
-        offset += 3 * 4
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, stride, ctypes.c_void_p(offset))
+        offset += 2 * 4
         # texture
         glEnableVertexAttribArray(1)
         glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, stride, ctypes.c_void_p(offset))
@@ -172,19 +218,26 @@ class Mesh:
     def draw(self) -> None:
         glDrawArrays(GL_TRIANGLES, 0, self.vertex_count)
 
-    def destroy(self):
-        glDeleteVertexArrays(1, (self.vao,))
-        glDeleteBuffers(1, (self.vbo,))
+        # glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, self.ebo)
+        # glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0)
+
+
+def destroy(self):
+    glDeleteVertexArrays(1, (self.vao,))
+    glDeleteBuffers(1, (self.vbo, self.ebo))
 
 
 class RectMesh(Mesh):
     def __init__(self, pos: Vector2, size: Vector2) -> None:
         super().__init__()
 
-        vertices = make_quad(pos, size)
-        self.vertex_count = 4
+        vertices, indices = make_quad(pos, size)
+        self.vertex_count = 6
 
         glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices, GL_STATIC_DRAW)
+        self.ebo = glGenBuffers(1)
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, self.ebo)
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.nbytes, indices, GL_STATIC_DRAW)
 
 
 class Shader:

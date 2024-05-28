@@ -11,7 +11,7 @@ from Scripts.particles import ParticleGroup, ImageCache, CircleParticle, LeafPar
 from Scripts.utils import load_image, draw_text
 from Scripts.utils_math import dist
 # from Scripts.opengl_backend_moderngl import Renderer
-from Scripts.opengl_backend import Renderer
+# from Scripts.opengl_backend import Renderer
 
 
 RES = Vector2(800, 600)
@@ -20,8 +20,8 @@ RES = Vector2(800, 600)
 mainClock = pygame.time.Clock()
 pygame.init()
 pygame.font.init()
-screen = pygame.display.set_mode(RES, pygame.OPENGL | pygame.DOUBLEBUF)
-# screen = pygame.display.set_mode(RES, 0, 32)
+# screen = pygame.display.set_mode(RES, pygame.OPENGL | pygame.DOUBLEBUF)
+screen = pygame.display.set_mode(RES, 0, 32)
 font = pygame.font.SysFont("arial", 21)
 
 TILESIZE = 32
@@ -536,7 +536,7 @@ tile_map.pre_render_chunks()
 img_cache = ImageCache(load_image)
 particle_group = ParticleGroup(img_cache)
 
-renderer = Renderer()
+# renderer = Renderer()
 
 # region Slider setup
 gravity_slider = pygame_gui.elements.UIHorizontalSlider(relative_rect=pygame.Rect(210, 500, 500, 30),
@@ -723,12 +723,10 @@ while run:
     pygame_gui_manager.update(dt)
     pygame_gui_manager.draw_ui(screen)
 
-    renderer.render(screen)
-
     # Update ------------------------------------------------- #
     # renderer.render(screen)
     # renderer.render_particles(particle_group.particles)
-    # pygame.display.flip()
+    pygame.display.flip()
 # renderer.quit()
 pygame.quit()
 sys.exit()
