@@ -113,7 +113,7 @@ def make_quad(pos: Vector2, size: Vector2) -> np.array:
 
 class Renderer:
     def __init__(self) -> None:
-        glViewport(-int(SCREEN_SIZE.x) // 4, -int(SCREEN_SIZE.y) // 4, int(SCREEN_SIZE.x), int(SCREEN_SIZE.y))
+        # glViewport(-int(SCREEN_SIZE.x) // 4, -int(SCREEN_SIZE.y) // 4, int(SCREEN_SIZE.x), int(SCREEN_SIZE.y))
 
         glClearColor(0.1, 0.2, 0.2, 1)
 
@@ -151,9 +151,9 @@ class Texture:
                 image_width, image_height = image.size
             else:
                 image_width, image_height = size.x, size.y
-            image = image.convert("RGBA")
+            image = image.convert("RGB")
             image_data = image.tobytes()
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image_width, image_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image_data)
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, image_width, image_height, 0, GL_RGB, GL_UNSIGNED_BYTE, image_data)
         glGenerateMipmap(GL_TEXTURE_2D)
 
     def use(self):

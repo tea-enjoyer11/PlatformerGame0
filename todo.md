@@ -10,8 +10,7 @@ Vllt mithilfe von modernGL die pygamesurface in eine opengl textur verwandeln un
 
 Der hier hats hinbekommen:
 https://github.com/MarkelZ/pygame-light2d
-
-anderes:
+https://ncase.me/sight-and-light/
 https://www.youtube.com/watch?v=Vtab9CHEMCA
 
 # Async

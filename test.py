@@ -85,3 +85,6 @@ print(sum(l))
 l = [False, True, True, True]
 print(sum(l))
 # endregion
+
+
+print([0] * 10)

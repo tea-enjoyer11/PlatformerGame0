@@ -37,6 +37,9 @@ class ParticleGroup:
     def __len__(self):
         return len(self.particles)
 
+    def clear(self) -> None:
+        self.particles.clear()
+
     def add(self, particles: Particle | Iterable[Particle]):
         if isinstance(particles, Particle):
             self.particles.append(particles)
