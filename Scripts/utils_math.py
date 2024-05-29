@@ -1,4 +1,5 @@
 from pygame import Vector2
+import math
 
 
 def lerp(start: float, end: float, time: float) -> float:
@@ -10,7 +11,8 @@ def Vector2Lerp(start: Vector2, end: Vector2, time: float) -> Vector2:
 
 
 def dist(p1: Vector2, p2: Vector2) -> float:
-    return ((p2[0] - p1[0]) ** 2 + (p2[1] - p1[1])) ** 0.5
+    # return ((p2[0] - p1[0]) ** 2 + (p2[1] - p1[1])) ** 0.5
+    return math.sqrt(math.pow(p2[0] - p1[0], 2) + math.pow(p2[1] - p1[1], 2))
 
 
 def clamp(minimum, x, maximum):

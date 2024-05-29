@@ -1,3 +1,4 @@
+from Scripts.utils_math import dist
 import math
 import pygame
 from pygame import Vector2, Surface
@@ -67,10 +68,18 @@ class Particle:
     def cast(self, walls: list[Boundary]) -> list[Vector2]:
         l = []
         for r in self.rays:
+            closest = None
+            record = math.inf
             for b in walls:
                 p = r.cast(b)
                 if p:
-                    l.append(p)
+                    dis = dist(self.pos, p)
+                    if (dis < record):
+                        record = dis
+                        closest = p
+
+            if closest:
+                l.append(closest)
         return l
 
     def render(self, screen: Surface):
