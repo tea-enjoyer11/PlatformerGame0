@@ -27,5 +27,8 @@ font = pygame.font.SysFont("arial", 21)
 IMGS = {
     0: load_image("assets/tile.png"),
     1: load_image("assets/ramp_left.png"),
-    2: load_image("assets/ramp_right.png")
+    2: load_image("assets/ramp_right.png"),
+    3: load_image("assets/custom_ramp.png"),
+    4: load_image("assets/custom_ramp2.png"),
+    5: load_image("assets/custom_ramp3.png"),
 }

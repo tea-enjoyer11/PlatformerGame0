@@ -17,10 +17,14 @@ for i in range(16):
     tiles.append(Tile(Vector2(i, 9)))
 # tiles = []
 tiles.append(Tile(Vector2(0, 0)))
+tiles.append(CustomRamp(Vector2(-1, 9), load_image("assets/custom_ramp_hitbox.png"), TileType.RAMP_RIGHT, img_idx=3))
+tiles.append(CustomRamp(Vector2(-3, 9), load_image("assets/custom_ramp2_hitbox.png"), TileType.RAMP_LEFT, img_idx=4))
+tiles.append(CustomRamp(Vector2(-5, 9), load_image("assets/custom_ramp3_hitbox.png"), TileType.RAMP_RIGHT, img_idx=5))
 for x in range(-16, 16):
     for y in range(16):
         tiles.append(Tile(Vector2(x, 10 + y)))
 p = Player(Vector2(200, 500))
+
 
 right = False
 left = False
@@ -111,7 +115,7 @@ while run:
         player_movement[0] *= 4
         player_movement[1] *= 4
 
-    close_tiles = tile_map.get_around(p.pos, 5)
+    close_tiles = tile_map.get_around(p.pos)
     collisions = p.move(player_movement, close_tiles, dt, noclip)
     if (collisions['bottom']) or (collisions['top']) and not noclip:
         p.vel.y = 0
@@ -124,9 +128,9 @@ while run:
 
     draw_text(screen, f"DT:{dt:.4f} DT multiplier:{dt_multiplicator:.4f}", (0, 80))
     draw_text(screen, f"{mainClock.get_fps():.0f}", (500, 0))
-    draw_text(screen, f"POS:{p.pos} NOCLIP: {noclip}", (500, 50))
-    draw_text(screen, f"TILEMAP:\nAmount of Chunks: {len(tile_map._chunks)}\nAmount of Tiles: {tile_map.amount_of_tiles}", (500, 100))
-    draw_text(screen, f"PARTICLES:\nAmount of Particles: {len(particle_group)}", (500, 200))
+    draw_text(screen, f"TILEPOS: {p.pos // TILESIZE}\nPOS:{p.pos}\nNOCLIP: {noclip}", (500, 50))
+    draw_text(screen, f"TILEMAP:\nAmount of Chunks: {len(tile_map._chunks)}\nAmount of Tiles: {tile_map.amount_of_tiles}", (500, 150))
+    draw_text(screen, f"PARTICLES:\nAmount of Particles: {len(particle_group)}", (500, 250))
     draw_text(screen, f"{collisions}", (0, 0), font=font)
     draw_text(screen, f"{p._last_collision_types}", (0, 20))
     draw_text(screen, f"Are the last and current collisions the same: {collisions == p._last_collision_types}", (0, 40))

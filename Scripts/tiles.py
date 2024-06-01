@@ -1,4 +1,7 @@
 from Scripts.CONFIG import *
+from Scripts.CONFIG import Vector2
+from typing import Literal
+
 
 NEIGHBOR_OFFSETS = [
     (-1, 0), (-1, -1), (0, -1), (1, -1), (1, 0), (0, 0), (-1, 1), (0, 1), (1, 1)
@@ -9,6 +12,7 @@ class TileType(Enum):
     TILE = auto()
     RAMP_LEFT = auto()
     RAMP_RIGHT = auto()
+    RAMP_CUSTOM = auto()
 
 
 class Tile:
@@ -27,7 +31,7 @@ class Tile:
 
 
 class Ramp(Tile):
-    __slots__ = ("elevation",)
+    __slots__ = ("elevation", )
 
     def __init__(self, pos: Vector2, tile_type: TileType, elevation: float = 1) -> None:  # angegeben in wie TILESIZE einheit
         super().__init__(pos, tile_type)
@@ -45,6 +49,44 @@ class Ramp(Tile):
 
     # def __repr__(self) -> str:
     #     return f"<{self.pos=}, {self.type=}, {self.img_idx=}, {self.elevation=}>"
+
+
+class CustomRamp(Tile):
+    __slots__ = ("height_data", "orientation", "size")
+
+    def __init__(self, pos: Vector2, hitbox: Surface, orientation: Literal[TileType.RAMP_LEFT, TileType.RAMP_RIGHT], tile_type: TileType = TileType.RAMP_CUSTOM, img_idx=0) -> None:
+        super().__init__(pos, tile_type)
+
+        self.height_data = CustomRamp.parse_data(hitbox)
+        self.orientation = orientation
+        self.img_idx = img_idx
+        self.size = Vector2(hitbox.get_size())
+
+    @staticmethod
+    def parse_data(hitbox: Surface) -> ...:
+        ret: dict[int, int] = {}
+        # ret ist ein dict wo, die x position als key
+        # und die höhe der ramp an der x position als value gespeichert wird
+        # Bsp: {1: 2, 2: 3, 3: 5, ...}
+        # Dann ist beim ersten pixel die Rampe 2 hoch,
+        # beim zweiten 3, beim dritten 5.
+
+        w, h = hitbox.get_size()
+        white = Color(255, 255, 255, 255)
+        black = Color(0, 0, 0, 255)
+        for x in range(w):
+            v = 0
+            for y in range(h):
+                y = h - y - 1
+                col = hitbox.get_at((x, y))
+                # print((x, y), col)
+                if col == white:
+                    v += 1
+                elif col == black:
+                    break
+            ret[x] = v
+        # print(ret)
+        return ret
 
 
 class Chunk:
@@ -102,23 +144,6 @@ class Chunk:
                         ret.append(self._tiles[p])
         return ret
 
-    def get_in_range(self, pos: Vector2, radius: float) -> list[Tile | Ramp]:
-
-        # !!! ARSCH LANGSAM !!!
-
-        ret: list[Tile | Ramp] = []
-
-        x, y = pos.x // TILESIZE % CHUNKSIZE, pos.y // TILESIZE % CHUNKSIZE
-
-        for _y in range(-radius, radius):
-            for _x in range(-radius, radius):
-                p = (int(x + _x), int(y + _y))
-                if p in self._tiles:
-                    ret.append(self._tiles[p])
-                    print((x, y), p)
-
-        return ret
-
     def add(self, tile: Tile) -> None:
         pos = tuple(tile.pos)
         pos = (pos[0] % CHUNKSIZE, pos[1] % CHUNKSIZE)
@@ -133,6 +158,15 @@ class Chunk:
 
     def _tile_is_on_edge(self, tile: Tile | Ramp) -> bool:
         x, y = tile.pos.x % CHUNKSIZE, tile.pos.y % CHUNKSIZE
+        additional_w, additional_h = tuple(Vector2(tile_rect(tile).size) // TILESIZE - Vector2(1))
+        additional_w = max(0, additional_w)
+        additional_h = max(0, additional_h)
+        x = min(self.size[0], x + additional_w)
+        y = max(0, y - additional_h)
+
+        # if isinstance(tile, CustomRamp) or isinstance(tile, Ramp):
+        #     print(additional_w, additional_h, x, y, type(tile))
+
         left_right = (x == 0 or x == self.size[0]) and 0 <= y <= self.size[1]
         top_bottom = (y == 0 or y == self.size[1]) and 0 <= x <= self.size[0]
         if left_right:
@@ -146,12 +180,19 @@ class Chunk:
         global_tile_offset = Vector2(0)
 
         # ! Smart approach
-        ramps, tiles = [], []
+        ramps, custom_ramps, tiles = [], [], []
         for _, tile in self._tiles.items():
             if tile.type in [TileType.RAMP_LEFT, TileType.RAMP_RIGHT]:
                 ramps.append(tile)
+            elif tile.type == TileType.RAMP_CUSTOM:
+                custom_ramps.append(tile)
             else:
                 tiles.append(tile)
+
+        for c_ramp in sorted(custom_ramps, key=lambda r: r.size.y, reverse=True):
+            on_edge = self._tile_is_on_edge(c_ramp)
+            if on_edge and c_ramp.size.y > TILESIZE:
+                global_tile_offset.y = c_ramp.size.y
 
         for ramp in sorted(ramps, key=lambda r: r.elevation, reverse=True):
             on_edge = self._tile_is_on_edge(ramp)
@@ -167,6 +208,13 @@ class Chunk:
             local_pos = (tile.pos.x % CHUNKSIZE, tile.pos.y % CHUNKSIZE)
             local_pos = (local_pos[0] * TILESIZE, local_pos[1] * TILESIZE + global_tile_offset.y)
             l.append((IMGS[tile.img_idx], local_pos))
+
+        for c_ramp in custom_ramps:
+            local_pos = (c_ramp.pos.x % CHUNKSIZE, c_ramp.pos.y % CHUNKSIZE)
+            offset_y = c_ramp.size.y - TILESIZE
+            local_pos = (local_pos[0] * TILESIZE, local_pos[1] * TILESIZE + global_tile_offset.y - offset_y)
+            l.append((IMGS[c_ramp.img_idx], local_pos))
+            # print(local_pos)
 
         # ! Naive approach
         # for local_pos, tile in self._tiles.items():
@@ -265,7 +313,7 @@ class TileMap:
         if pos in self._tiles:
             return self._tiles[pos]
 
-    def get_around(self, pos: Vector2, range: float) -> list[Tile]:
+    def get_around(self, pos: Vector2) -> list[Tile]:
         related_chunk_pos = Vector2(pos.x // TILESIZE // self.chunk_size[0], pos.y // TILESIZE // self.chunk_size[1])
         # print("related chunk position:", related_chunk_pos, pos)
         ret = []
@@ -354,7 +402,16 @@ def collision_test(object_1: Rect, object_list: list[Rect]) -> list[Rect]:
 
 
 def tile_rect(t: Tile | Ramp, offset: Vector2 = Vector2(0)) -> Rect:
-    if isinstance(t, Ramp):
+    if isinstance(t, CustomRamp):
+        if t.size.y > TILESIZE:
+            x = t.pos.x * TILESIZE - offset.x
+            y = (t.pos.y * TILESIZE) + TILESIZE - t.size.y - offset.y
+            w = TILESIZE
+            h = t.size.y
+            return Rect(x, y, w, h)
+        else:
+            return Rect(t.pos.x * TILESIZE - offset.x, t.pos.y * TILESIZE - offset.y, TILESIZE, TILESIZE)
+    elif isinstance(t, Ramp):
         x = t.pos.x * TILESIZE - offset.x
         y = (t.pos.y * TILESIZE) + TILESIZE - (TILESIZE * t.elevation) - offset.y
         w = TILESIZE
@@ -369,6 +426,13 @@ def render_collision_mesh(surf: Surface, color: Color, t: Tile | Ramp, width: in
         r = tile_rect(t, offset=offset)
         p1, p2 = r.bottomleft, r.topright
         if t.type == TileType.RAMP_LEFT:
+            p1, p2 = r.bottomright, r.topleft
+        pygame.draw.rect(surf, color, r, width)
+        pygame.draw.line(surf, color, p1, p2, width)
+    elif isinstance(t, CustomRamp):
+        r = tile_rect(t, offset=offset)
+        p1, p2 = r.bottomleft, r.topright
+        if t.orientation == TileType.RAMP_LEFT:
             p1, p2 = r.bottomright, r.topleft
         pygame.draw.rect(surf, color, r, width)
         pygame.draw.line(surf, color, p1, p2, width)
