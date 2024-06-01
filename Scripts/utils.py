@@ -13,8 +13,9 @@ if not pygame.font.get_init():
     pygame.font.init()
 
 
-def load_image(path: str) -> Surface:
+def load_image(path: str, flip_x: bool = False, flip_y: bool = False) -> Surface:
     i = pygame.image.load(path).convert()
+    i = pygame.transform.flip(i, flip_x=flip_x, flip_y=flip_y)
     i.set_colorkey("black")
     return i
 

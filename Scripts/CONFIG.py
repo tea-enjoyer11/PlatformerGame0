@@ -29,6 +29,9 @@ IMGS = {
     1: load_image("assets/ramp_left.png"),
     2: load_image("assets/ramp_right.png"),
     3: load_image("assets/custom_ramp.png"),
+    33: load_image("assets/custom_ramp.png", flip_x=True),
     4: load_image("assets/custom_ramp2.png"),
+    44: load_image("assets/custom_ramp2.png", flip_x=True),
     5: load_image("assets/custom_ramp3.png"),
+    6: load_image("assets/custom_ramp3.png", flip_x=True),
 }

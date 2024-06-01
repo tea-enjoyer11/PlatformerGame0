@@ -19,7 +19,11 @@ for i in range(16):
 tiles.append(Tile(Vector2(0, 0)))
 tiles.append(CustomRamp(Vector2(-1, 9), load_image("assets/custom_ramp_hitbox.png"), TileType.RAMP_RIGHT, img_idx=3))
 tiles.append(CustomRamp(Vector2(-3, 9), load_image("assets/custom_ramp2_hitbox.png"), TileType.RAMP_LEFT, img_idx=4))
-tiles.append(CustomRamp(Vector2(-5, 9), load_image("assets/custom_ramp3_hitbox.png"), TileType.RAMP_RIGHT, img_idx=5))
+tiles.append(CustomRamp(Vector2(-4, 9), load_image("assets/custom_ramp2_hitbox.png", flip_x=True), TileType.RAMP_RIGHT, img_idx=44))
+tiles.append(CustomRamp(Vector2(-7, 9), load_image("assets/custom_ramp3_hitbox.png"), TileType.RAMP_RIGHT, img_idx=5))
+tiles.append(CustomRamp(Vector2(-6, 9), load_image("assets/custom_ramp3_hitbox.png", flip_x=True), TileType.RAMP_LEFT, img_idx=6))
+tiles.append(CustomRamp(Vector2(-11, 9), load_image("assets/custom_ramp_hitbox.png"), TileType.RAMP_RIGHT, img_idx=3))
+tiles.append(CustomRamp(Vector2(-10, 9), load_image("assets/custom_ramp_hitbox.png", flip_x=True), TileType.RAMP_LEFT, img_idx=33))
 for x in range(-16, 16):
     for y in range(16):
         tiles.append(Tile(Vector2(x, 10 + y)))
