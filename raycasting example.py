@@ -106,7 +106,8 @@ class Particle:
         [r.set_pos(pos) for r in self.rays]
 
 
-walls = [Boundary(Vector2(random.randint(20, 380), random.randint(20, 380)), Vector2(random.randint(20, 380), random.randint(20, 380))) for _ in range(5)]
+# walls = [Boundary(Vector2(random.randint(20, 380), random.randint(20, 380)), Vector2(random.randint(20, 380), random.randint(20, 380))) for _ in range(5)]
+walls = [Boundary(Vector2(300, 100), Vector2(300, 300)), Boundary(Vector2(100, 100), Vector2(200, 200))]
 walls.extend([Boundary(Vector2(0, 0), Vector2(0, 400)), Boundary(Vector2(0, 400), Vector2(400, 400)), Boundary(Vector2(400, 400), Vector2(400, 0)), Boundary(Vector2(400, 0), Vector2(0, 0))])
 part = Particle(Vector2(100, 200))
 part.update_rays(walls)
