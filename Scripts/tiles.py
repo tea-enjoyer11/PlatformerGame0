@@ -16,7 +16,7 @@ class TileType(Enum):
 
 
 class Tile:
-    __slots__ = ("pos", "type", "img_idx")
+    __slots__ = ("pos", "type", "img_idx", "size")
 
     def __init__(self, pos: Vector2, tile_type: TileType = TileType.TILE) -> None:
         if not isinstance(pos, Vector2):
@@ -24,10 +24,11 @@ class Tile:
         self.pos = pos
         self.type = tile_type
 
+        self.size = (TILESIZE, TILESIZE)
         self.img_idx = 0
 
-    # def __repr__(self) -> str:
-    #     return f"<{self.pos=}, {self.type=}, {self.img_idx=}>"
+    def __repr__(self) -> str:
+        return f"<{self.pos=}, {self.type=}, {self.img_idx=}>"
 
 
 class Ramp(Tile):
@@ -37,6 +38,7 @@ class Ramp(Tile):
         super().__init__(pos, tile_type)
 
         self.elevation = elevation
+        self.size = (TILESIZE, TILESIZE * elevation)
 
         if self.type == TileType.RAMP_LEFT:
             self.img_idx = f"LEFT{elevation}"
@@ -47,8 +49,8 @@ class Ramp(Tile):
             if self.img_idx not in IMGS:
                 IMGS[self.img_idx] = pygame.transform.scale(IMGS[2], (TILESIZE, TILESIZE * elevation))
 
-    # def __repr__(self) -> str:
-    #     return f"<{self.pos=}, {self.type=}, {self.img_idx=}, {self.elevation=}>"
+    def __repr__(self) -> str:
+        return f"<{self.pos=}, {self.type=}, {self.img_idx=}, {self.elevation=}>"
 
 
 class CustomRamp(Tile):
@@ -88,15 +90,21 @@ class CustomRamp(Tile):
         # print(ret)
         return ret
 
+    def __repr__(self) -> str:
+        return f"<{self.pos=}, {self.type=}, {self.img_idx=}, {self.size=}>"
+
 
 class Chunk:
-    __slots__ = ("pos", "size", "_tiles", "_pre_renderd_surf", "_pre_renderd_surf_size", "pre_render_offset")
+    __slots__ = ("parent", "pos", "size", "_tiles", "_ghost_tiles", "_pre_renderd_surf",
+                 "_pre_renderd_surf_size", "pre_render_offset")
     default_pre_renderd_surf_size = Vector2(CHUNKSIZE * TILESIZE, CHUNKSIZE * TILESIZE)
 
-    def __init__(self, pos: Vector2, size) -> None:
+    def __init__(self, parent: "TileMap", pos: Vector2, size) -> None:
+        self.parent = parent
         self.pos = Vector2(pos)
         self.size = size
         self._tiles: dict[tuple, Tile] = {}
+        self._ghost_tiles: dict[tuple, Tile] = {}
 
         self._pre_renderd_surf: Surface = None
         self._pre_renderd_surf_size: Vector2 = None
@@ -142,13 +150,56 @@ class Chunk:
                     p = (x_off + x + x_ + x__, y_off + y + y_ + y__)
                     if p in self._tiles:
                         ret.append(self._tiles[p])
+                    if p in self._ghost_tiles:
+                        ret.append(self._ghost_tiles[p])
         return ret
 
     def add(self, tile: Tile) -> None:
         pos = tuple(tile.pos)
         pos = (pos[0] % CHUNKSIZE, pos[1] % CHUNKSIZE)
-        # print("         localpos: ", pos)
         self._tiles[pos] = tile
+
+        on_edge = self._tile_is_on_edge(tile)
+        if sum(on_edge):
+            exceeding_chunk_border = tile.size[1] > TILESIZE
+            if not exceeding_chunk_border:
+                return
+            print(tile.size[1] > TILESIZE, tile)
+            neighbor_positions = [  # Define the relative positions for each possible neighbor
+                (0, -1),  # top
+                (1, 0),   # right
+                (0, 1),   # bottom
+                (-1, 0),  # left
+                (1, -1),  # top-right
+                (1, 1),   # bottom-right
+                (-1, 1),  # bottom-left
+                (-1, -1)  # top-left
+            ]
+            neighbor_conditions = [  # Define the conditions for each neighbor based on the `on_edges` list
+                (0,),     # top
+                (1,),     # right
+                (2,),     # bottom
+                (3,),     # left
+                (0, 1),   # top-right
+                (1, 2),   # bottom-right
+                (2, 3),   # bottom-left
+                (0, 3)    # top-left
+            ]
+
+            # Iterate over each possible neighbor and its conditions
+            for pos_, conditions in zip(neighbor_positions, neighbor_conditions):
+                if all(on_edge[c] for c in conditions):  # Check if all conditions are met
+                    rel_chunk_pos = tuple(self.pos + Vector2(pos_))
+
+                    self.parent._create_empty_chunk(rel_chunk_pos)
+
+                    rel_chunk = self.parent.get_chunk(rel_chunk_pos)
+
+                    for i in range(int(tile.size[1] / TILESIZE)):
+                        ghost_pos = tile.pos
+                        ghost_pos = (ghost_pos[0], ghost_pos[1] - i)  # die position stimmt noch nicht
+                        ghost_pos = (ghost_pos[0] % CHUNKSIZE, ghost_pos[1] % CHUNKSIZE)
+                        rel_chunk.add_ghost_tile(tile, ghost_pos, raw_pos=True)
 
     def adds(self, tiles: list[Tile]) -> None:
         for tile in tiles:
@@ -156,24 +207,39 @@ class Chunk:
             pos = (pos[0] % CHUNKSIZE, pos[1] % CHUNKSIZE)
             self._tiles[pos] = tile
 
+    def add_ghost_tile(self, tile: Tile, pos: Vector2, raw_pos: bool = False):
+        pos_ = None
+        if raw_pos:
+            self._ghost_tiles[tuple(pos)] = tile
+        else:
+            pos_ = (pos[0] % CHUNKSIZE, pos[1] % CHUNKSIZE)
+            self._ghost_tiles[pos_] = tile
+        print("Added Ghost tile", pos_, pos, tile)
+
     def _tile_is_on_edge(self, tile: Tile | Ramp) -> bool:
+        """
+        returns:
+            list[bool]: [on_top_edge, on_right_edge, on_bottom_edge, on_left_edge]
+        """
         x, y = tile.pos.x % CHUNKSIZE, tile.pos.y % CHUNKSIZE
         additional_w, additional_h = tuple(Vector2(tile_rect(tile).size) // TILESIZE - Vector2(1))
-        additional_w = max(0, additional_w)
-        additional_h = max(0, additional_h)
         x = min(self.size[0], x + additional_w)
         y = max(0, y - additional_h)
 
         # if isinstance(tile, CustomRamp) or isinstance(tile, Ramp):
         #     print(additional_w, additional_h, x, y, type(tile))
 
-        left_right = (x == 0 or x == self.size[0]) and 0 <= y <= self.size[1]
-        top_bottom = (y == 0 or y == self.size[1]) and 0 <= x <= self.size[0]
-        if left_right:
-            return left_right
-        if top_bottom:
-            return top_bottom
-        return False
+        on_top_edge = (0 <= x <= self.size[0] and y == 0)
+        on_right_edge = (x == self.size[0] and 0 <= y <= self.size[1])
+        on_bottom_edge = (0 <= x <= self.size[0] and y == self.size[1])
+        on_left_edge = (x == 0 and 0 <= y <= self.size[1])
+        # left_right = (x == 0 or x == self.size[0]) and 0 <= y <= self.size[1]
+        # top_bottom = (y == 0 or y == self.size[1]) and 0 <= x <= self.size[0]
+        # if left_right:
+        #     return left_right
+        # if top_bottom:
+        #     return top_bottom
+        return [on_top_edge, on_right_edge, on_bottom_edge, on_left_edge]
 
     def pre_render(self):
         l = []
@@ -191,14 +257,14 @@ class Chunk:
 
         for c_ramp in sorted(custom_ramps, key=lambda r: r.size.y, reverse=True):
             on_edge = self._tile_is_on_edge(c_ramp)
-            if on_edge and c_ramp.size.y > TILESIZE:
+            if sum(on_edge) and c_ramp.size.y > TILESIZE:
                 global_tile_offset.y = c_ramp.size.y
 
         for ramp in sorted(ramps, key=lambda r: r.elevation, reverse=True):
             on_edge = self._tile_is_on_edge(ramp)
             offset_y = TILESIZE * ramp.elevation - TILESIZE
             local_pos = (ramp.pos.x % CHUNKSIZE, ramp.pos.y % CHUNKSIZE)
-            if ramp.elevation > 1 and on_edge:
+            if ramp.elevation > 1 and sum(on_edge):
                 if global_tile_offset.y < offset_y:
                     global_tile_offset.y = offset_y
             local_pos = (local_pos[0] * TILESIZE, local_pos[1] * TILESIZE + global_tile_offset.y - offset_y)
@@ -297,7 +363,7 @@ class TileMap:
 
             if related_chunk_pos not in self._chunks:
                 # chunk_pos = (related_chunk_pos[0] * TILESIZE, related_chunk_pos[1] * TILESIZE)
-                self._chunks[related_chunk_pos] = Chunk(related_chunk_pos, size=self.chunk_size)
+                self._chunks[related_chunk_pos] = Chunk(self, related_chunk_pos, size=self.chunk_size)
 
             chunk = self._chunks[related_chunk_pos]
             chunk.add(tile)
@@ -312,6 +378,15 @@ class TileMap:
                 pos = None
         if pos in self._tiles:
             return self._tiles[pos]
+
+    def get_chunk(self, pos: tuple) -> Chunk | None:
+        if pos in self._chunks:
+            return self._chunks[pos]
+        return None
+
+    def _create_empty_chunk(self, pos: tuple) -> None:
+        if pos not in self._chunks:
+            self._chunks[pos] = Chunk(self, pos, self.chunk_size)
 
     def get_around(self, pos: Vector2) -> list[Tile]:
         related_chunk_pos = Vector2(pos.x // TILESIZE // self.chunk_size[0], pos.y // TILESIZE // self.chunk_size[1])

@@ -11,9 +11,10 @@ CHUNKSIZE = 8
 CHUNKWIDTH = CHUNKSIZE * TILESIZE
 
 GROUND_FRICTION = 0.78
-
+AIR_FRICTION = 0.98
 
 RES = Vector2(800, 600)
+
 
 pygame.init()
 pygame.font.init()
@@ -33,5 +34,13 @@ IMGS = {
     4: load_image("assets/custom_ramp2.png"),
     44: load_image("assets/custom_ramp2.png", flip_x=True),
     5: load_image("assets/custom_ramp3.png"),
-    6: load_image("assets/custom_ramp3.png", flip_x=True),
+    55: load_image("assets/custom_ramp3.png", flip_x=True),
+
+    "grass0": load_image("assets/tiles/grass0.png"),
+    "grass1": load_image("assets/tiles/grass1.png"),
+    "grass2": load_image("assets/tiles/grass2.png"),
+    "grass3": load_image("assets/tiles/grass3.png"),
+    "grass4": load_image("assets/tiles/grass4.png"),
+    "grass5": load_image("assets/tiles/grass5.png"),
+    "grass6": load_image("assets/tiles/grass6.png"),
 }

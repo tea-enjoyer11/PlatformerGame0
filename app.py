@@ -16,12 +16,13 @@ tiles: list[Ramp | Tile] = [Ramp(Vector2(2, 8), TileType.RAMP_RIGHT, 1), Ramp(Ve
 for i in range(16):
     tiles.append(Tile(Vector2(i, 9)))
 # tiles = []
-tiles.append(Tile(Vector2(0, 0)))
+for i in range(CHUNKSIZE):
+    tiles.append(Tile(Vector2(0, i)))
 tiles.append(CustomRamp(Vector2(-1, 9), load_image("assets/custom_ramp_hitbox.png"), TileType.RAMP_RIGHT, img_idx=3))
 tiles.append(CustomRamp(Vector2(-3, 9), load_image("assets/custom_ramp2_hitbox.png"), TileType.RAMP_LEFT, img_idx=4))
 tiles.append(CustomRamp(Vector2(-4, 9), load_image("assets/custom_ramp2_hitbox.png", flip_x=True), TileType.RAMP_RIGHT, img_idx=44))
 tiles.append(CustomRamp(Vector2(-7, 9), load_image("assets/custom_ramp3_hitbox.png"), TileType.RAMP_RIGHT, img_idx=5))
-tiles.append(CustomRamp(Vector2(-6, 9), load_image("assets/custom_ramp3_hitbox.png", flip_x=True), TileType.RAMP_LEFT, img_idx=6))
+tiles.append(CustomRamp(Vector2(-6, 9), load_image("assets/custom_ramp3_hitbox.png", flip_x=True), TileType.RAMP_LEFT, img_idx=55))
 tiles.append(CustomRamp(Vector2(-11, 9), load_image("assets/custom_ramp_hitbox.png"), TileType.RAMP_RIGHT, img_idx=3))
 tiles.append(CustomRamp(Vector2(-10, 9), load_image("assets/custom_ramp_hitbox.png", flip_x=True), TileType.RAMP_LEFT, img_idx=33))
 for x in range(-16, 16):
@@ -86,9 +87,12 @@ jumpforce_lbl = pygame_gui.elements.ui_label.UILabel(pygame.Rect(10, 560, 90, 30
 # endregion
 
 # Loop ------------------------------------------------------- #
+player_movement = [0, 0]
+fps_options = [0, 15, 30, 60, 120, 240]
+fps_idx = 0
 run = True
 while run:
-    dt = mainClock.tick(0) * 0.001
+    dt = mainClock.tick(fps_options[fps_idx]) * 0.001
     dt *= dt_multiplicator
 
     # self.scroll += ((self.player.pos - Vector2(4, 4)) - RES / 4 / 2 - self.scroll) / 30
@@ -101,7 +105,9 @@ while run:
     if not noclip:
         p.vel.y += gravity * dt
         p.vel.y = min(p.vel.y, max_gravity)
-        player_movement = [0, p.vel.y]
+        # player_movement = [0, p.vel.y]
+        player_movement[1] = p.vel.y
+        player_movement[0] = 0
     if noclip:
         player_movement = [0, 0]
 
@@ -132,6 +138,7 @@ while run:
 
     draw_text(screen, f"DT:{dt:.4f} DT multiplier:{dt_multiplicator:.4f}", (0, 80))
     draw_text(screen, f"{mainClock.get_fps():.0f}", (500, 0))
+    draw_text(screen, f"{player_movement[0]:.2f}, {player_movement[1]:.2f}", (0, 200))
     draw_text(screen, f"TILEPOS: {p.pos // TILESIZE}\nPOS:{p.pos}\nNOCLIP: {noclip}", (500, 50))
     draw_text(screen, f"TILEMAP:\nAmount of Chunks: {len(tile_map._chunks)}\nAmount of Tiles: {tile_map.amount_of_tiles}", (500, 150))
     draw_text(screen, f"PARTICLES:\nAmount of Particles: {len(particle_group)}", (500, 250))
@@ -167,6 +174,8 @@ while run:
                 particle_group.clear()
             if event.key == pygame.K_LCTRL:
                 boost = True
+            if event.key == pygame.K_g:
+                fps_idx = (fps_idx + 1) % len(fps_options)
         if event.type == pygame.KEYUP:
             if event.key == pygame.K_d:
                 right = False
