@@ -171,7 +171,7 @@ class Player(PhysicsEntity):
         ramps: list[Ramp] = [t for t in tiles if t.type in [TileType.RAMP_LEFT, TileType.RAMP_RIGHT]]
         custom_ramps: list[CustomRamp] = [t for t in tiles if t.type is TileType.RAMP_CUSTOM]
 
-        # handle standard collisions
+        # handle collisions
         self._handle_standart_colls(movement, dt, normal_tiles)
         self._handle_ramps_colls(movement, dt, ramps)
         self._handle_custom_ramps_colls(movement, dt, custom_ramps)

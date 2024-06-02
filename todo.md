@@ -14,6 +14,12 @@ https://ncase.me/sight-and-light/
 https://www.youtube.com/watch?v=Vtab9CHEMCA
 https://github.com/ScriptLineStudios
 
+*vllt durchbruch*
+Einmal eine surface mit einem kreis mit alpha blending erstellen (Irgendwie so was: https://i.pinimg.com/originals/80/1a/84/801a84eeabffbc7df98b18b1fd474a3a.png)
+Dann mithilfe von raycasting eine Maske für die sichtbaren Orte erstellen.
+Die zwei dinger zusammen = boom licht. Das kann man dann als Maske in der Farbe vom licht über die eigentliche Surface blitten (vllt die surface vorher abdunkeln. [Oder mit nem shader und mix(...) verwenden oder so]). 
+
+
 # Async
 
 **corroutines**

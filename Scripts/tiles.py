@@ -210,7 +210,7 @@ class Chunk:
         else:
             pos_ = (pos[0] % CHUNKSIZE, pos[1] % CHUNKSIZE)
             self._ghost_tiles[pos_] = tile
-        print("Added Ghost tile", pos_, pos, tile)
+        # print("Added Ghost tile", pos_, pos, tile)
 
     def _tile_is_on_edge(self, tile: Tile | Ramp) -> bool:
         """
