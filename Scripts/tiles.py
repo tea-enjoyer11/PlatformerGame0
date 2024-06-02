@@ -6,6 +6,26 @@ from typing import Literal
 NEIGHBOR_OFFSETS = [
     (-1, 0), (-1, -1), (0, -1), (1, -1), (1, 0), (0, 0), (-1, 1), (0, 1), (1, 1)
 ]
+neighbor_positions = [  # Define the relative positions for each possible neighbor
+    (0, -1),  # top
+    (1, 0),   # right
+    (0, 1),   # bottom
+    (-1, 0),  # left
+    (1, -1),  # top-right
+    (1, 1),   # bottom-right
+    (-1, 1),  # bottom-left
+    (-1, -1)  # top-left
+]
+neighbor_conditions = [  # Define the conditions for each neighbor based on the `on_edges` list
+    (0,),     # top
+    (1,),     # right
+    (2,),     # bottom
+    (3,),     # left
+    (0, 1),   # top-right
+    (1, 2),   # bottom-right
+    (2, 3),   # bottom-left
+    (0, 3)    # top-left
+]
 
 
 class TileType(Enum):
@@ -164,42 +184,18 @@ class Chunk:
             exceeding_chunk_border = tile.size[1] > TILESIZE
             if not exceeding_chunk_border:
                 return
-            print(tile.size[1] > TILESIZE, tile)
-            neighbor_positions = [  # Define the relative positions for each possible neighbor
-                (0, -1),  # top
-                (1, 0),   # right
-                (0, 1),   # bottom
-                (-1, 0),  # left
-                (1, -1),  # top-right
-                (1, 1),   # bottom-right
-                (-1, 1),  # bottom-left
-                (-1, -1)  # top-left
-            ]
-            neighbor_conditions = [  # Define the conditions for each neighbor based on the `on_edges` list
-                (0,),     # top
-                (1,),     # right
-                (2,),     # bottom
-                (3,),     # left
-                (0, 1),   # top-right
-                (1, 2),   # bottom-right
-                (2, 3),   # bottom-left
-                (0, 3)    # top-left
-            ]
+            # print(tile.size[1] > TILESIZE, tile)
 
             # Iterate over each possible neighbor and its conditions
             for pos_, conditions in zip(neighbor_positions, neighbor_conditions):
                 if all(on_edge[c] for c in conditions):  # Check if all conditions are met
                     rel_chunk_pos = tuple(self.pos + Vector2(pos_))
-
                     self.parent._create_empty_chunk(rel_chunk_pos)
-
                     rel_chunk = self.parent.get_chunk(rel_chunk_pos)
-
                     for i in range(int(tile.size[1] / TILESIZE)):
-                        ghost_pos = tile.pos
-                        ghost_pos = (ghost_pos[0], ghost_pos[1] - i)  # die position stimmt noch nicht
-                        ghost_pos = (ghost_pos[0] % CHUNKSIZE, ghost_pos[1] % CHUNKSIZE)
-                        rel_chunk.add_ghost_tile(tile, ghost_pos, raw_pos=True)
+                        ghost_pos = tile.pos - Vector2(0, i)
+                        if ghost_pos[1] < self.pos.y * CHUNKSIZE:
+                            rel_chunk.add_ghost_tile(tile, ghost_pos)
 
     def adds(self, tiles: list[Tile]) -> None:
         for tile in tiles:
@@ -384,9 +380,12 @@ class TileMap:
             return self._chunks[pos]
         return None
 
-    def _create_empty_chunk(self, pos: tuple) -> None:
+    def _create_empty_chunk(self, pos: tuple) -> Chunk | None:
         if pos not in self._chunks:
-            self._chunks[pos] = Chunk(self, pos, self.chunk_size)
+            c = Chunk(self, pos, self.chunk_size)
+            self._chunks[pos] = c
+            return c
+        return None
 
     def get_around(self, pos: Vector2) -> list[Tile]:
         related_chunk_pos = Vector2(pos.x // TILESIZE // self.chunk_size[0], pos.y // TILESIZE // self.chunk_size[1])
@@ -395,26 +394,7 @@ class TileMap:
 
         # ! New approach
         pos_on_edge = on_edge_of_chunk(pos)
-        neighbor_positions = [  # Define the relative positions for each possible neighbor
-            (0, -1),  # top
-            (1, 0),   # right
-            (0, 1),   # bottom
-            (-1, 0),  # left
-            (1, -1),  # top-right
-            (1, 1),   # bottom-right
-            (-1, 1),  # bottom-left
-            (-1, -1)  # top-left
-        ]
-        neighbor_conditions = [  # Define the conditions for each neighbor based on the `on_edges` list
-            (0,),     # top
-            (1,),     # right
-            (2,),     # bottom
-            (3,),     # left
-            (0, 1),   # top-right
-            (1, 2),   # bottom-right
-            (2, 3),   # bottom-left
-            (0, 3)    # top-left
-        ]
+
         processed_chunks = set()  # to keep track of processed chunks
 
         if tuple(related_chunk_pos) in self._chunks:
