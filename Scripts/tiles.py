@@ -32,6 +32,7 @@ neighbor_conditions = [  # Define the conditions for each neighbor based on the 
 
 class TileType(Enum):
     TILE = auto()
+    TILE_CUSTOM = auto()
     RAMP_LEFT = auto()
     RAMP_RIGHT = auto()
     RAMP_CUSTOM = auto()
@@ -52,27 +53,7 @@ class Tile:
     def __repr__(self) -> str:
         return f"<{self.pos=}, {self.type=}, {self.img_idx=}>"
 
-    def serialize(self):
-        attrs = []
-        s = ""
-
-        # cls = self.__class__
-        # while cls != object:
-        #     if '__slots__' in cls.__dict__:
-        #         for val in cls.__slots__:
-        #             print(f"{cls.__name__}.{val} = {getattr(self, val)}")
-        #             attrs.append(val)
-        #     cls = cls.__bases__[0]
-
-        # for attr in attrs:
-        #     s += str(SerializeTypes.__getitem__(attr).value)
-
-        for _type in SerializeTypes:
-            try:
-                if a := self.__getattribute__(_type.name):
-                    s += "!" + str(a)
-            except AttributeError:
-                pass
+    def serialize(self):  # TODO funktion mal schreiben!
         s = s[1:]
         s = s.replace(" ", "")
         ss = save_pickle(s)
@@ -80,6 +61,41 @@ class Tile:
         ssss = save_compressed_pickle(self)
         sssss = save_pickle(self)
         print(len(s), len(ss), len(sss), len(ssss), len(sssss))
+
+
+class CustomTile(Tile):
+    __slots__ = ("pixel_data", )
+
+    def __init__(self, pos: Vector2, tile_type: TileType = TileType.TILE_CUSTOM) -> None:
+        super().__init__(pos, tile_type)
+
+        self.pixel_data: dict[tuple, str] = {}
+        for y in range(TILESIZE):
+            for x in range(TILESIZE):
+                self.pixel_data[(x, y)] = "red"
+
+    def add_pixel(self, pos: Vector2) -> None:
+        # pos_ = pos // TILESIZE
+        # pixel_pos = pos_ // TILESIZE
+        # print(pos, pos_, pixel_pos)
+        # self.pixel_data[tuple(pixel_pos)] = "white"
+        self.pixel_data[tuple(pos)] = "white"
+        print(pos)
+
+    def remove_pixel(self, pos: Vector2) -> None:
+        # pos_ = pos // TILESIZE
+        # pixel_pos = pos_ // TILESIZE
+        # if tuple(pixel_pos) in self.pixel_data:
+        #    del self.pixel_data[tuple(pixel_pos)]
+        if tuple(pos) in self.pixel_data:
+            del self.pixel_data[tuple(pos)]
+
+    def gen_surf(self) -> Surface:
+        s = Surface((TILESIZE, TILESIZE))
+        for val, col in self.pixel_data.items():
+            s.set_at(val, col)
+        s.set_colorkey((0, 0, 0))
+        return s
 
 
 class Ramp(Tile):
@@ -521,7 +537,7 @@ class TileMap:
         files = [f for f in os.listdir(directory) if f.endswith(".data")]
         for file_path in files:
             c: Chunk = None
-            with open(directory + "/" + file_path, "rb") as f:
+            with open(f"{directory}/{file_path}", "rb") as f:
                 data = f.read()
                 c = load_compressed_pickle(data)
             if c:
