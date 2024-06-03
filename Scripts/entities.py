@@ -12,7 +12,7 @@ class PhysicsEntity:
         self.size = size
         self.vel = Vector2(0)
         self.rect = Rect(pos.x, pos.y, size.x, size.y)
-        self.min_step_height = 1.  # in TILESIZE Größe gerechnet
+        self.min_step_height = 1.0  # in TILESIZE Größe gerechnet
 
         self._collision_types = {'top': False, 'bottom': False, 'right': False, 'left': False}
         self._last_collision_types = {'top': False, 'bottom': False, 'right': False, 'left': False}
@@ -137,8 +137,9 @@ class Player(PhysicsEntity):
                         self.rect.left = hitbox.right
                         self.collision_types['left'] = True
                         self.pos[0] = self.rect.x
-                elif ramp.orientation == TileType.RAMP_LEFT:
+                elif ramp.orientation == TileType.RAMP_LEFT:  # ! TODO bug beheben
                     rel_x_border = self.rect.x - hitbox.x + self.rect.width  # wie nah ist der Spieler an der Kante?
+                    print(rel_x_border, 0 < abs(rel_x_border) < border_collision_threshold, not steppable)
                     if movement[0] > 0 and (0 < abs(rel_x_border) <= border_collision_threshold) and not steppable:
                         ramp_height = 0
                         self.rect.right = hitbox.left

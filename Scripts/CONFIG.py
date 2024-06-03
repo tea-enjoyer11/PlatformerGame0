@@ -3,7 +3,7 @@ from pygame import Vector2, Color, Rect, Surface
 from enum import Enum, auto
 from typing import Iterable, Hashable, Optional, Callable, Sequence
 
-from Scripts.utils import load_image
+from Scripts.utils import load_image, save_compressed_pickle, save_pickle, load_compressed_pickle, load_pickle
 
 
 TILESIZE = 32

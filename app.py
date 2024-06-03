@@ -25,11 +25,18 @@ tiles.append(CustomRamp(Vector2(-7, 9), load_image("assets/custom_ramp3_hitbox.p
 tiles.append(CustomRamp(Vector2(-6, 9), load_image("assets/custom_ramp3_hitbox.png", flip_x=True), TileType.RAMP_LEFT, img_idx=55))
 tiles.append(CustomRamp(Vector2(-11, 9), load_image("assets/custom_ramp_hitbox.png"), TileType.RAMP_RIGHT, img_idx=3))
 tiles.append(CustomRamp(Vector2(-10, 9), load_image("assets/custom_ramp_hitbox.png", flip_x=True), TileType.RAMP_LEFT, img_idx=33))
+tiles.append(CustomRamp(Vector2(-13, 9), load_image("assets/custom_ramp3_hitbox.png", flip_x=True), TileType.RAMP_LEFT, img_idx=55))
+tiles.append(CustomRamp(Vector2(-15, 9), load_image("assets/custom_ramp3_hitbox.png"), TileType.RAMP_RIGHT, img_idx=5))
 for x in range(-16, 16):
     for y in range(16):
         tiles.append(Tile(Vector2(x, 10 + y)))
 p = Player(Vector2(200, 500))
 
+Ramp(Vector2(2, 8), TileType.RAMP_RIGHT, 1).serialize()
+print()
+CustomRamp(Vector2(-7, 9), load_image("assets/custom_ramp3_hitbox.png"), TileType.RAMP_RIGHT, img_idx=5).serialize()
+print()
+Tile(Vector2(0)).serialize()
 
 right = False
 left = False

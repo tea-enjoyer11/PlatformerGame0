@@ -50,6 +50,35 @@ class Tile:
     def __repr__(self) -> str:
         return f"<{self.pos=}, {self.type=}, {self.img_idx=}>"
 
+    def serialize(self):
+        attrs = []
+        s = ""
+
+        # cls = self.__class__
+        # while cls != object:
+        #     if '__slots__' in cls.__dict__:
+        #         for val in cls.__slots__:
+        #             print(f"{cls.__name__}.{val} = {getattr(self, val)}")
+        #             attrs.append(val)
+        #     cls = cls.__bases__[0]
+
+        # for attr in attrs:
+        #     s += str(SerializeTypes.__getitem__(attr).value)
+
+        for _type in SerializeTypes:
+            try:
+                if a := self.__getattribute__(_type.name):
+                    s += "!" + str(a)
+            except AttributeError:
+                pass
+        s = s[1:]
+        s = s.replace(" ", "")
+        ss = save_pickle(s)
+        sss = save_compressed_pickle(s)
+        ssss = save_compressed_pickle(self)
+        sssss = save_pickle(self)
+        print(len(s), len(ss), len(sss), len(ssss), len(sssss))
+
 
 class Ramp(Tile):
     __slots__ = ("elevation", )
@@ -494,3 +523,28 @@ def render_collision_mesh(surf: Surface, color: Color, t: Tile | Ramp, width: in
     else:  # isinstance(t, Tile)
         r = tile_rect(t, offset=offset)
         pygame.draw.rect(surf, color, r, width)
+
+
+def serialize_chunk(chunk: Chunk, directory: str) -> None:
+    data = save_compressed_pickle(chunk)
+
+    file_name = f"{directory}/{str(tuple(chunk.pos))}"
+    with open(file_name, "wb") as f:
+        f.write(data)
+
+
+def deserialize_chunk(chunk: Chunk, file_path: str) -> Chunk | None:
+    data: bytes = None
+
+    with open(file_path, "rb") as f:
+        data = f.read()
+
+    if data:
+        chunk = load_compressed_pickle(data)
+        return chunk
+    return None
+
+
+def serialize_tilemap(tilemap: TileMap) -> bytes:
+    ...
+    # falls überhaupt nötig

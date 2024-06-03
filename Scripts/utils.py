@@ -126,7 +126,7 @@ def circle_surf(radius: float, color: Color) -> Surface:
     return surf
 
 
-def save_picke(obj: object) -> bytes:
+def save_pickle(obj: object) -> bytes:
     return pickle.dumps(obj)
 
 
