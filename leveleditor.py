@@ -1,5 +1,6 @@
 from Scripts.CONFIG import *
 from Scripts.utils import draw_text
+from Scripts.tiles import TileMap, Tile
 
 screen = pygame.display.set_mode(RES, 0, 32)
 clock = pygame.time.Clock()
@@ -8,6 +9,10 @@ mPos = Vector2(0)
 highlight_tile_pos = Vector2(0)
 x_off = 0
 y_off = 0
+clicks = [False, False, False]
+tilemap = TileMap()
+last_tile: Tile = None
+tile_position = Vector2(0)
 
 
 def vector_equal(v1: Vector2, v2: Vector2) -> bool:
@@ -17,13 +22,14 @@ def vector_equal(v1: Vector2, v2: Vector2) -> bool:
 def render_grid():
     for y in range(-TILESIZE, int(RES.y) + TILESIZE, TILESIZE):
         for x in range(-TILESIZE, int(RES.x) + TILESIZE, TILESIZE):
-            c = "white"
             p = Vector2(x - x_off, y - y_off)
             rect = pygame.Rect(p.x, p.y, TILESIZE, TILESIZE)
 
-            if vector_equal(p // TILESIZE, highlight_tile_pos):
-                c = "red"
-            pygame.draw.rect(screen, c, rect, 1)
+            pygame.draw.rect(screen, "white", rect, 1)
+
+
+def render_selected_tile():
+    pygame.draw.rect(screen, "yellow", [tile_position.x * TILESIZE - offset.x, tile_position.y * TILESIZE - offset.y, TILESIZE, TILESIZE], 1)
 
 
 up = False
@@ -43,9 +49,17 @@ while run:
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_r:
                 offset = Vector2(0)
+            if event.key == pygame.K_o:
+                tilemap.serialize("saves/t1")
+                print("Saved Tilemap")
+            if event.key == pygame.K_i:
+                tilemap = TileMap.deserialize("saves/t1")
+                print("Loaded Tilemap")
 
     keys = pygame.key.get_pressed()
+    clicks = pygame.mouse.get_pressed()
     mPos = Vector2(pygame.mouse.get_pos())
+    tile_position = Vector2(int((mPos[0] + offset.x) // TILESIZE), int((mPos[1] + offset.y) // TILESIZE))
     up = keys[pygame.K_w]
     left = keys[pygame.K_a]
     down = keys[pygame.K_s]
@@ -54,24 +68,35 @@ while run:
 
     x_off = offset.x % TILESIZE
     y_off = offset.y % TILESIZE
-    highlight_tile_pos = mPos // TILESIZE - Vector2(x_off, y_off)
-
     if up:
-        offset.y -= 1 * (1 + int(ctrl) * 3)
+        offset.y -= 1 * (1 + int(ctrl) * 9)
     if down:
-        offset.y += 1 * (1 + int(ctrl) * 3)
+        offset.y += 1 * (1 + int(ctrl) * 9)
     if left:
-        offset.x -= 1 * (1 + int(ctrl) * 3)
+        offset.x -= 1 * (1 + int(ctrl) * 9)
     if right:
-        offset.x += 1 * (1 + int(ctrl) * 3)
+        offset.x += 1 * (1 + int(ctrl) * 9)
+
+    if clicks[0]:
+        last_tile = Tile(tile_position)
+        tilemap.add(last_tile)
+        tilemap.pre_render_chunks()
+    if clicks[2]:
+        last_tile = None
+        tilemap.remove(tile_position)
+        tilemap.pre_render_chunks()
 
     screen.fill((92, 95, 89))
 
     render_grid()
+    tilemap.render(screen, Vector2(0), offset=offset)
+    render_selected_tile()
 
     draw_text(screen, f"TilePos: {highlight_tile_pos}", (10, 10), background_color="black")
     draw_text(screen, f"Offset: {offset}", (10, 40), background_color="black")
     draw_text(screen, f"Tile Offset: {Vector2(x_off, y_off)}", (10, 70), background_color="black")
+    draw_text(screen, f"{last_tile}", (10, 110), background_color="black")
+    draw_text(screen, f"{tile_position}", (10, 140), background_color="black")
 
     pygame.display.flip()
 

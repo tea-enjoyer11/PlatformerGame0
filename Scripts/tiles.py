@@ -1,3 +1,5 @@
+from copy import deepcopy
+import os
 from Scripts.CONFIG import *
 from Scripts.CONFIG import Vector2
 from typing import Literal
@@ -159,6 +161,9 @@ class Chunk:
         self._pre_renderd_surf_size: Vector2 = None
         self.pre_render_offset = Vector2(0)
 
+    def copy(self) -> "Chunk":
+        return deepcopy(self)
+
     def get(self, pos: tuple) -> Tile | None:
         if pos in self._tiles:
             return self._tiles[pos]
@@ -203,6 +208,14 @@ class Chunk:
                         ret.append(self._ghost_tiles[p])
         return ret
 
+    def is_empty(self) -> bool:
+        return len(self._tiles)
+
+    def remove(self, pos: Vector2) -> None:
+        pos = (pos[0] % CHUNKSIZE, pos[1] % CHUNKSIZE)
+        if pos in self._tiles:
+            del self._tiles[pos]
+
     def add(self, tile: Tile) -> None:
         pos = tuple(tile.pos)
         pos = (pos[0] % CHUNKSIZE, pos[1] % CHUNKSIZE)
@@ -226,7 +239,7 @@ class Chunk:
                         if ghost_pos[1] < self.pos.y * CHUNKSIZE:
                             rel_chunk.add_ghost_tile(tile, ghost_pos)
 
-    def adds(self, tiles: list[Tile]) -> None:
+    def extend(self, tiles: list[Tile]) -> None:
         for tile in tiles:
             pos = tuple(tile.pos)
             pos = (pos[0] % CHUNKSIZE, pos[1] % CHUNKSIZE)
@@ -379,7 +392,26 @@ class TileMap:
     def pre_render_chunks(self) -> None:
         [c.pre_render() for c in self._chunks.values()]
 
-    def add(self, tiles: list[Tile]) -> None:
+    def remove(self, pos: Vector2) -> None:
+        related_chunk_pos = (pos.x // self.chunk_size[0], pos.y // self.chunk_size[1])
+        if related_chunk_pos in self._chunks:
+            self._chunks[related_chunk_pos].remove(pos)
+            if not self._chunks[related_chunk_pos].is_empty():
+                del self._chunks[related_chunk_pos]
+
+    def add(self, tile: Tile) -> None:
+        related_chunk_pos = (tile.pos.x // self.chunk_size[0], tile.pos.y // self.chunk_size[1])
+        # print(related_chunk_pos)
+
+        if related_chunk_pos not in self._chunks:
+            # chunk_pos = (related_chunk_pos[0] * TILESIZE, related_chunk_pos[1] * TILESIZE)
+            self._chunks[related_chunk_pos] = Chunk(self, related_chunk_pos, size=self.chunk_size)
+
+        chunk = self._chunks[related_chunk_pos]
+        chunk.add(tile)
+        self.amount_of_tiles += 1
+
+    def extend(self, tiles: list[Tile]) -> None:
         for tile in tiles:
             # self._tiles[tuple(tile.pos)] = tile
 
@@ -476,6 +508,29 @@ class TileMap:
                         pygame.draw.rect(surf, "blue", Rect(x * CHUNKWIDTH - offset[0] - chunk.pre_render_offset.x, y * CHUNKWIDTH - offset[1] - chunk.pre_render_offset.y, TILESIZE * CHUNKSIZE + chunk.pre_render_offset.x, TILESIZE * CHUNKSIZE + chunk.pre_render_offset.y), 4)
                     pygame.draw.rect(surf, "red", Rect(x * CHUNKWIDTH - offset[0], y * CHUNKWIDTH - offset[1], TILESIZE * CHUNKSIZE, TILESIZE * CHUNKSIZE), 2)
 
+    def serialize(self, directory: str) -> None:
+        for chunk in self._chunks.values():
+            serialize_chunk(chunk.copy(), directory)
+
+    @staticmethod
+    def deserialize(directory: str) -> "TileMap":
+        # load ...
+        chunks: dict[tuple, Chunk] = {}
+        tilemap = TileMap()
+
+        files = [f for f in os.listdir(directory) if f.endswith(".data")]
+        for file_path in files:
+            c: Chunk = None
+            with open(directory + "/" + file_path, "rb") as f:
+                data = f.read()
+                c = load_compressed_pickle(data)
+            if c:
+                c.parent = tilemap
+                chunks[tuple(c.pos)] = c
+        tilemap._chunks = chunks
+        tilemap.pre_render_chunks()
+        return tilemap
+
 
 def collision_test(object_1: Rect, object_list: list[Rect]) -> list[Rect]:
     collision_list = []
@@ -526,10 +581,12 @@ def render_collision_mesh(surf: Surface, color: Color, t: Tile | Ramp, width: in
 
 
 def serialize_chunk(chunk: Chunk, directory: str) -> None:
+    chunk.__setattr__("_pre_renderd_surf", None)  # sonst Fehler, pickle kann pygame.Surface nicht bearbeiten
+    chunk.__setattr__("parent", None)
     data = save_compressed_pickle(chunk)
 
-    file_name = f"{directory}/{str(tuple(chunk.pos))}"
-    with open(file_name, "wb") as f:
+    file_name = f"{directory}/{str(tuple(chunk.pos))}.data"
+    with open(file_name, "wb+") as f:
         f.write(data)
 
 
@@ -543,8 +600,3 @@ def deserialize_chunk(chunk: Chunk, file_path: str) -> Chunk | None:
         chunk = load_compressed_pickle(data)
         return chunk
     return None
-
-
-def serialize_tilemap(tilemap: TileMap) -> bytes:
-    ...
-    # falls überhaupt nötig
