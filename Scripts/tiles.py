@@ -1,3 +1,4 @@
+from pprint import pprint
 from copy import deepcopy
 import os
 from Scripts.CONFIG import *
@@ -68,7 +69,7 @@ class CustomTile(Tile):
         self.pixel_data: dict[tuple, str] = {}
         for y in range(TILESIZE):
             for x in range(TILESIZE):
-                self.pixel_data[(x, y)] = "red"
+                self.pixel_data[(x, y)] = "black"
 
         self._pre_renderd_surf: Surface = None
         self._last_pre_render_pixel_data: dict[tuple, str] = {}
@@ -82,10 +83,10 @@ class CustomTile(Tile):
         self.pixel_data[tuple(pos)] = "white"
         # print(pos)
 
-    def extend_pixels(self, data: list[tuple]) -> None:
+    def extend_pixels(self, data: list[tuple], color: tuple = (255, 255, 255)) -> None:
         self._last_pre_render_pixel_data = deepcopy(self.pixel_data)
         for pos in data:
-            self.pixel_data[tuple(pos)] = "white"
+            self.pixel_data[tuple(pos)] = color
 
     def remove_pixel(self, pos: Vector2) -> None:
         # pos_ = pos // TILESIZE
@@ -285,37 +286,47 @@ class Chunk:
         custom_tile.add_pixel(pixel_pos)
         custom_tile.pre_render()
 
-    def extend_pixels(self, data: list[Vector2], start_tile_pos: Vector2, start_pixel_pos: Vector2) -> None:
-        start_tile_pos_ = tuple(start_tile_pos)
-        buffer: dict[tuple, list[tuple]] = {start_tile_pos_: []}
+    def extend_pixels(self, data: list[Vector2], start_tile_pos: Vector2, start_pixel_pos: Vector2, color: tuple = (255, 255, 255)) -> None:
+        start_pixel_pos = Vector2(start_pixel_pos.x % CHUNKSIZE, start_pixel_pos.y % CHUNKSIZE)
+        buffer: dict[tuple, list[tuple]] = {tuple(start_tile_pos): []}
 
+        SHIFTING_SIZE = TILESIZE - 1
         for offset_pixel in data:
-            tile_pos = start_tile_pos_
-            pixel_pos = start_pixel_pos + offset_pixel
+            tile_pos = start_tile_pos.copy()
+            pixel_pos = start_pixel_pos.copy() + offset_pixel.copy()
 
             # TODO bug fixen: Wenn pixel_pos durch offset negativ wird, müssen tile_pos und pixel_pos geändert werden
-            # Der Code funktioniert nicht:
-            #
-            # if pixel_pos.x < 0:
-            #     tile_pos = (int(tile_pos[0] - 1), int(tile_pos[1]))
-            #     # pixel_pos += Vector2(TILESIZE, 0)
-            #     print(tile_pos, start_tile_pos, pixel_pos)
-            # elif pixel_pos.x > TILESIZE - 1:
-            #     tile_pos = (int(tile_pos[0] + 1), int(tile_pos[1]))
-            #     # pixel_pos -= Vector2(TILESIZE, 0)
-            #     print(tile_pos, start_tile_pos, pixel_pos)
-            # if pixel_pos.y < 0:
-            #     tile_pos = (int(tile_pos[0]), int(tile_pos[1] - 1))
-            #     # pixel_pos -= Vector2(0, TILESIZE)
-            #     print(tile_pos, start_tile_pos, pixel_pos)
-            # elif pixel_pos.y > TILESIZE - 1:
-            #     tile_pos = (int(tile_pos[0]), int(tile_pos[1] + 1))
-            #     # pixel_pos += Vector2(0, TILESIZE)
-            #     print(tile_pos, start_tile_pos, pixel_pos)
+            if pixel_pos.x < 0:
+                pp = pixel_pos.copy()
+                tp = tile_pos.copy()
+                tile_pos.x -= 1
+                pixel_pos.x += SHIFTING_SIZE
+                print("111111111", pp, tp, "    |    ", pixel_pos, tile_pos)
+            elif pixel_pos.x > TILESIZE - 1:
+                pp = pixel_pos.copy()
+                tp = tile_pos.copy()
+                tile_pos.x += 1
+                pixel_pos.x -= SHIFTING_SIZE
+                print("222222222", pp, tp, "    |    ", pixel_pos, tile_pos)
+            if pixel_pos.y < 0:
+                pp = pixel_pos.copy()
+                tp = tile_pos.copy()
+                tile_pos.y -= 1
+                pixel_pos.y += SHIFTING_SIZE
+                print("333333333", pp, tp, "    |    ", pixel_pos, tile_pos)
+            elif pixel_pos.y > TILESIZE - 1:
+                pp = pixel_pos.copy()
+                tp = tile_pos.copy()
+                tile_pos.y += 1
+                pixel_pos.y -= SHIFTING_SIZE
+                print("444444444", pp, tp, "    |    ", pixel_pos, tile_pos)
 
+            tile_pos = tuple(tile_pos)
             if tile_pos not in buffer:
                 buffer[tile_pos] = []
-            buffer[tile_pos].append(tuple(pixel_pos))
+            buffer[tile_pos].append(tuple(pixel_pos.copy()))
+
+        print(buffer)
 
         for pos, data in buffer.items():
             pos = (pos[0] % CHUNKSIZE, pos[1] % CHUNKSIZE)
@@ -329,7 +340,7 @@ class Chunk:
             else:
                 custom_tile = CustomTile(start_tile_pos)
                 self._tiles[pos] = custom_tile
-            custom_tile.extend_pixels(data)
+            custom_tile.extend_pixels(data, color=color)
             custom_tile.pre_render()
 
     def extend(self, tiles: list[Tile]) -> None:
@@ -525,14 +536,14 @@ class TileMap:
         chunk = self._chunks[related_chunk_pos]
         chunk.add_pixel(tile_pos, pixel_pos)
 
-    def extend_pixels(self, data: list[Vector2], start_tile_pos: Vector2, start_pixel_pos: Vector2) -> None:
+    def extend_pixels(self, data: list[Vector2], start_tile_pos: Vector2, start_pixel_pos: Vector2, color: tuple = (255, 255, 255)) -> None:
         related_chunk_pos = (start_tile_pos.x // self.chunk_size[0], start_tile_pos.y // self.chunk_size[1])
 
         if related_chunk_pos not in self._chunks:
             self._chunks[related_chunk_pos] = Chunk(self, related_chunk_pos, size=self.chunk_size)
 
         chunk = self._chunks[related_chunk_pos]
-        chunk.extend_pixels(data, start_tile_pos, start_pixel_pos)
+        chunk.extend_pixels(data, start_tile_pos, start_pixel_pos, color=color)
 
     def extend(self, tiles: list[Tile]) -> None:
         for tile in tiles:

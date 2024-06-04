@@ -179,7 +179,7 @@ while run:
             # New approach # 0.003 sekunden
             positions = get_pixel_positions()
             t1 = time.perf_counter()
-            tilemap.extend_pixels(positions, tile_position, sub_tile_position)
+            tilemap.extend_pixels(positions, tile_position, sub_tile_position, color=(255, 255, 255))
             tt += time.perf_counter() - t1
 
             tilemap.pre_render_chunks()
@@ -190,8 +190,14 @@ while run:
                 tilemap.remove(position)
             tilemap.pre_render_chunks()
         elif mode == 1:
-            pass
-            # custom_tile.remove_pixel(sub_tile_position)
+            tt = 0
+            positions = get_pixel_positions()
+            t1 = time.perf_counter()
+            tilemap.extend_pixels(positions, tile_position, sub_tile_position, color=(0, 0, 0))
+            tt += time.perf_counter() - t1
+
+            tilemap.pre_render_chunks()
+            print(tt)
 
     screen.fill((92, 95, 89))
 
