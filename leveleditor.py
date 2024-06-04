@@ -155,13 +155,13 @@ while run:
     y_off = offset.y % TILESIZE
 
     if up:
-        offset.y -= 2 * (1 + int(ctrl) * 4)
+        offset.y -= 2 * (1 + int(ctrl) * 4) * 1 / 4 * dt
     if down:
-        offset.y += 2 * (1 + int(ctrl) * 4)
+        offset.y += 2 * (1 + int(ctrl) * 4) * 1 / 4 * dt
     if left:
-        offset.x -= 2 * (1 + int(ctrl) * 4)
+        offset.x -= 2 * (1 + int(ctrl) * 4) * 1 / 4 * dt
     if right:
-        offset.x += 2 * (1 + int(ctrl) * 4)
+        offset.x += 2 * (1 + int(ctrl) * 4) * 1 / 4 * dt
 
     if clicks[0]:
         if mode == 0:
@@ -209,7 +209,7 @@ while run:
     draw_text(screen, f"Cycle placing modes with 'G'", (500, 40), color="yellow", background_color="black")
     draw_text(screen, f"Cycle brush sizes with 'H'", (500, 70), color="yellow", background_color="black")
     draw_text(screen, f"Cycle brush types with 'J'", (500, 100), color="yellow", background_color="black")
-    draw_text(screen, f"TilePos: {highlight_tile_pos}", (10, 10), background_color="black")
+    draw_text(screen, f"Num Tiles: {tilemap.amount_of_tiles} | Num Chunks: {tilemap.amount_of_chunks}", (10, 10), background_color="black")
     draw_text(screen, f"Offset: {offset}", (10, 40), background_color="black")
     draw_text(screen, f"Tile Offset: {Vector2(x_off, y_off)}", (10, 70), background_color="black")
     draw_text(screen, f"TILEPOS: {tile_position} SUBTILEPOS: {sub_tile_position}", (10, 110), background_color="black")

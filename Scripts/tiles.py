@@ -1,5 +1,7 @@
 from pprint import pprint
 from copy import deepcopy
+from itertools import chain
+from queue import Queue
 import os
 from Scripts.CONFIG import *
 from Scripts.CONFIG import Vector2
@@ -51,13 +53,13 @@ class Tile:
         self.size = (TILESIZE, TILESIZE)
         self.img_idx = 0
 
-    def __repr__(self) -> str:
-        return f"<{self.pos=}, {self.type=}, {self.img_idx=}>"
-
     def serialize(self):  # TODO funktion mal schreiben!
         s = save_compressed_pickle(self)
         ss = save_pickle(self)
         print(len(s), len(ss))
+
+    def __repr__(self) -> str:
+        return f"<{self.pos=}, {self.type=}, {self.img_idx=}>"
 
 
 class CustomTile(Tile):
@@ -178,7 +180,8 @@ class CustomRamp(Tile):
 
 class Chunk:
     __slots__ = ("parent", "pos", "size", "_tiles", "_ghost_tiles", "_pre_renderd_surf",
-                 "_pre_renderd_surf_size", "pre_render_offset")
+                 "_pre_renderd_surf_size", "pre_render_offset",
+                 "_last_pre_render_data", "_pre_render_data")
     default_pre_renderd_surf_size = Vector2(CHUNKSIZE * TILESIZE, CHUNKSIZE * TILESIZE)
 
     def __init__(self, parent: "TileMap", pos: Vector2, size) -> None:
@@ -191,6 +194,8 @@ class Chunk:
         self._pre_renderd_surf: Surface = None
         self._pre_renderd_surf_size: Vector2 = None
         self.pre_render_offset = Vector2(0)
+        self._last_pre_render_data = None
+        self._pre_render_data = None
 
     def copy(self) -> "Chunk":
         return deepcopy(self)
@@ -243,13 +248,23 @@ class Chunk:
         return len(self._tiles)
 
     def remove(self, pos: Vector2) -> None:
+        self._last_pre_render_data = self._calc_pre_render_data()
+        ret = False
         pos = (pos[0] % CHUNKSIZE, pos[1] % CHUNKSIZE)
         if pos in self._tiles:
             del self._tiles[pos]
+            self.parent.add_to_pre_render_queue(self)
+            ret = True
+        self._pre_render_data = self._calc_pre_render_data()
+        return ret
 
-    def add(self, tile: Tile) -> None:
+    def add(self, tile: Tile) -> bool:
+        self._last_pre_render_data = self._calc_pre_render_data()
+        ret = False
         pos = tuple(tile.pos)
         pos = (pos[0] % CHUNKSIZE, pos[1] % CHUNKSIZE)
+        if pos not in self._tiles:
+            ret = True
         self._tiles[pos] = tile
 
         on_edge = self._tile_is_on_edge(tile)
@@ -269,8 +284,12 @@ class Chunk:
                         ghost_pos = tile.pos - Vector2(0, i)
                         if ghost_pos[1] < self.pos.y * CHUNKSIZE:
                             rel_chunk.add_ghost_tile(tile, ghost_pos)
+                            self.parent.add_to_pre_render_queue(rel_chunk)
+        self._pre_render_data = self._calc_pre_render_data()
+        return ret
 
     def add_pixel(self, tile_pos: Vector2, pixel_pos: Vector2) -> None:
+        self._last_pre_render_data = self._calc_pre_render_data()
         pos = tuple(tile_pos)
         pos = (pos[0] % CHUNKSIZE, pos[1] % CHUNKSIZE)
         custom_tile: CustomTile = None
@@ -285,8 +304,10 @@ class Chunk:
             self._tiles[pos] = custom_tile
         custom_tile.add_pixel(pixel_pos)
         custom_tile.pre_render()
+        self._pre_render_data = self._calc_pre_render_data()
 
     def extend_pixels(self, data: list[Vector2], start_tile_pos: Vector2, start_pixel_pos: Vector2, color: tuple = (255, 255, 255)) -> None:
+        self._last_pre_render_data = self._calc_pre_render_data()
         start_pixel_pos = Vector2(start_pixel_pos.x % CHUNKSIZE, start_pixel_pos.y % CHUNKSIZE)
         buffer: dict[tuple, list[tuple]] = {tuple(start_tile_pos): []}
 
@@ -342,12 +363,23 @@ class Chunk:
                 self._tiles[pos] = custom_tile
             custom_tile.extend_pixels(data, color=color)
             custom_tile.pre_render()
+        self._pre_render_data = self._calc_pre_render_data()
 
     def extend(self, tiles: list[Tile]) -> None:
+        self._last_pre_render_data = self._calc_pre_render_data()
         for tile in tiles:
             pos = tuple(tile.pos)
             pos = (pos[0] % CHUNKSIZE, pos[1] % CHUNKSIZE)
             self._tiles[pos] = tile
+        self._pre_render_data = self._calc_pre_render_data()
+
+    def _calc_pre_render_data(self) -> None:
+        return chain(self._tiles.items(), self._ghost_tiles.items())
+
+    def pre_render_needed(self) -> bool:
+        h1 = hash(self._last_pre_render_data)
+        h2 = hash(self._pre_render_data)
+        return not h1 == h2
 
     def add_ghost_tile(self, tile: Tile, pos: Vector2, raw_pos: bool = False):
         pos_ = None
@@ -384,6 +416,9 @@ class Chunk:
         return [on_top_edge, on_right_edge, on_bottom_edge, on_left_edge]
 
     def pre_render(self):
+        if not self.pre_render_needed():
+            return
+
         l = []
         global_tile_offset = Vector2(0)
 
@@ -490,7 +525,8 @@ def on_edge_of_chunk(pos: Vector2) -> list[bool]:
 
 
 class TileMap:
-    __slots__ = ("_chunks", "chunk_size", "amount_of_tiles", "culling_offset")
+    __slots__ = ("_chunks", "chunk_size", "amount_of_tiles",
+                 "amount_of_chunks", "culling_offset", "_pre_render_queue")
 
     def __init__(self, chunk_size=(CHUNKSIZE, CHUNKSIZE)) -> None:
         # self._tiles: dict[tuple, Tile] = {}
@@ -499,6 +535,8 @@ class TileMap:
         self.chunk_size = chunk_size
 
         self.amount_of_tiles = 0
+        self.amount_of_chunks = 0
+        self._pre_render_queue: Queue[Chunk] = Queue()
 
         self.culling_offset = Vector2(
             RES.x // TILESIZE / 4,
@@ -507,25 +545,46 @@ class TileMap:
 
     def pre_render_chunks(self) -> None:
         # TODO einen weg finden nur zu prerendern, falls sich was verändert hat. vllt hash von _tiles in _chunks nehmen und das vergleichen?
-        [c.pre_render() for c in self._chunks.values()]
+        # Chunk.pre_render_needed() ist eine Idee, funktioniert in der Praxis aber nicht gut.
+        # vllt kann man eine Liste oder Queue haben, wo man die Chunks, die neu sind und noch nicht geprerenderd wurden
+        # reinpackt und erst entfernt, wenn diese Funktion durch diese Liste durchgegangen ist.
+
+        # New approach
+        while not self._pre_render_queue.empty():
+            c = self._pre_render_queue.get()
+            c.pre_render()
+
+        # Old approach
+        # [c.pre_render() for c in self._chunks.values()]  # if c.pre_render_needed()]
 
     def remove(self, pos: Vector2) -> None:
         related_chunk_pos = (pos.x // self.chunk_size[0], pos.y // self.chunk_size[1])
         if related_chunk_pos in self._chunks:
-            self._chunks[related_chunk_pos].remove(pos)
+            chunk = self._chunks[related_chunk_pos]
+            if chunk.remove(pos):
+                self.amount_of_tiles -= 1
+                self.add_to_pre_render_queue(chunk)  # TODO checken ob das keinen fehler aufwirft, weil der chunk später auch entfernt werden kann!
             if not self._chunks[related_chunk_pos].is_empty():
                 del self._chunks[related_chunk_pos]
+                self.amount_of_chunks -= 1
+
+    def add_to_pre_render_queue(self, chunk: Chunk) -> None:
+        self._pre_render_queue.put(chunk)
 
     def add(self, tile: Tile) -> None:
         related_chunk_pos = (tile.pos.x // self.chunk_size[0], tile.pos.y // self.chunk_size[1])
 
         if related_chunk_pos not in self._chunks:
             # chunk_pos = (related_chunk_pos[0] * TILESIZE, related_chunk_pos[1] * TILESIZE)
-            self._chunks[related_chunk_pos] = Chunk(self, related_chunk_pos, size=self.chunk_size)
+            c = Chunk(self, related_chunk_pos, size=self.chunk_size)
+            self._chunks[related_chunk_pos] = c
+            self.amount_of_chunks += 1
+            self.add_to_pre_render_queue(c)
 
         chunk = self._chunks[related_chunk_pos]
-        chunk.add(tile)
-        self.amount_of_tiles += 1
+        if chunk.add(tile):
+            self.amount_of_tiles += 1
+            self.add_to_pre_render_queue(chunk)
 
     def add_pixel(self, tile_pos: Vector2, pixel_pos: Vector2) -> None:
         related_chunk_pos = (tile_pos.x // self.chunk_size[0], tile_pos.y // self.chunk_size[1])
@@ -557,8 +616,9 @@ class TileMap:
                 self._chunks[related_chunk_pos] = Chunk(self, related_chunk_pos, size=self.chunk_size)
 
             chunk = self._chunks[related_chunk_pos]
-            chunk.add(tile)
-        self.amount_of_tiles += len(tiles)
+            if chunk.add(tile):
+                self.amount_of_tiles += 1
+                self.add_to_pre_render_queue(chunk)
 
     def get(self, pos: tuple) -> Tile:
         if not isinstance(pos, tuple):
