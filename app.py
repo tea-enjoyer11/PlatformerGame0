@@ -27,7 +27,7 @@ tiles.append(CustomRamp(Vector2(-11, 9), load_image("assets/custom_ramp_hitbox.p
 tiles.append(CustomRamp(Vector2(-10, 9), load_image("assets/custom_ramp_hitbox.png", flip_x=True), TileType.RAMP_LEFT, img_idx=33))
 tiles.append(CustomRamp(Vector2(-13, 9), load_image("assets/custom_ramp3_hitbox.png", flip_x=True), TileType.RAMP_LEFT, img_idx=55))
 tiles.append(CustomRamp(Vector2(-15, 9), load_image("assets/custom_ramp3_hitbox.png"), TileType.RAMP_RIGHT, img_idx=5))
-for x in range(-16, 16):
+for x in range(-24, 24):
     for y in range(16):
         tiles.append(Tile(Vector2(x, 10 + y)))
 p = Player(Vector2(200, 500))
@@ -52,7 +52,7 @@ noclip = False
 scroll = Vector2(0)
 pygame_gui_manager = pygame_gui.ui_manager.UIManager((800, 600))
 tile_map = TileMap()
-tile_map.add(tiles)
+tile_map.extend(tiles)
 tile_map.pre_render_chunks()
 
 img_cache = ImageCache(load_image)

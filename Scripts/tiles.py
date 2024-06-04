@@ -54,17 +54,13 @@ class Tile:
         return f"<{self.pos=}, {self.type=}, {self.img_idx=}>"
 
     def serialize(self):  # TODO funktion mal schreiben!
-        s = s[1:]
-        s = s.replace(" ", "")
-        ss = save_pickle(s)
-        sss = save_compressed_pickle(s)
-        ssss = save_compressed_pickle(self)
-        sssss = save_pickle(self)
-        print(len(s), len(ss), len(sss), len(ssss), len(sssss))
+        s = save_compressed_pickle(self)
+        ss = save_pickle(self)
+        print(len(s), len(ss))
 
 
 class CustomTile(Tile):
-    __slots__ = ("pixel_data", )
+    __slots__ = ("pixel_data", "_pre_renderd_surf", "_last_pre_render_pixel_data")
 
     def __init__(self, pos: Vector2, tile_type: TileType = TileType.TILE_CUSTOM) -> None:
         super().__init__(pos, tile_type)
@@ -74,13 +70,17 @@ class CustomTile(Tile):
             for x in range(TILESIZE):
                 self.pixel_data[(x, y)] = "red"
 
+        self._pre_renderd_surf: Surface = None
+        self._last_pre_render_pixel_data: dict[tuple, str] = {}
+
     def add_pixel(self, pos: Vector2) -> None:
         # pos_ = pos // TILESIZE
         # pixel_pos = pos_ // TILESIZE
         # print(pos, pos_, pixel_pos)
         # self.pixel_data[tuple(pixel_pos)] = "white"
+        self._last_pre_render_pixel_data = deepcopy(self.pixel_data)
         self.pixel_data[tuple(pos)] = "white"
-        print(pos)
+        # print(pos)
 
     def remove_pixel(self, pos: Vector2) -> None:
         # pos_ = pos // TILESIZE
@@ -88,14 +88,23 @@ class CustomTile(Tile):
         # if tuple(pixel_pos) in self.pixel_data:
         #    del self.pixel_data[tuple(pixel_pos)]
         if tuple(pos) in self.pixel_data:
+            self._last_pre_render_pixel_data = deepcopy(self.pixel_data)
             del self.pixel_data[tuple(pos)]
 
-    def gen_surf(self) -> Surface:
-        s = Surface((TILESIZE, TILESIZE))
-        for val, col in self.pixel_data.items():
-            s.set_at(val, col)
-        s.set_colorkey((0, 0, 0))
-        return s
+    def pre_render_needed(self) -> bool:
+        h1 = hash(frozenset(self._last_pre_render_pixel_data.items()))
+        h2 = hash(frozenset(self.pixel_data.items()))
+        return not h1 == h2
+
+    def pre_render(self, force_pre_render: bool = False) -> None:
+        if self.pre_render_needed() or force_pre_render:
+            self._pre_renderd_surf = Surface((TILESIZE, TILESIZE))
+            for val, col in self.pixel_data.items():
+                self._pre_renderd_surf.set_at(val, col)
+            self._pre_renderd_surf.set_colorkey((0, 0, 0))
+
+    def get_pre_render(self) -> Surface:
+        return self._pre_renderd_surf
 
 
 class Ramp(Tile):
@@ -255,6 +264,25 @@ class Chunk:
                         if ghost_pos[1] < self.pos.y * CHUNKSIZE:
                             rel_chunk.add_ghost_tile(tile, ghost_pos)
 
+    def add_pixel(self, tile_pos: Vector2, pixel_pos: Vector2) -> None:
+        pos = tuple(tile_pos)
+        pos = (pos[0] % CHUNKSIZE, pos[1] % CHUNKSIZE)
+        custom_tile: CustomTile = None
+        if pos in self._tiles:
+            if isinstance(self._tiles[pos], CustomTile):
+                custom_tile = self._tiles[pos]
+            else:
+                custom_tile = CustomTile(tile_pos)
+                self._tiles[pos] = custom_tile
+        else:
+            custom_tile = CustomTile(tile_pos)
+            self._tiles[pos] = custom_tile
+        custom_tile.add_pixel(pixel_pos)
+        custom_tile.pre_render()
+
+    def extend_pixels(self, data: list[Vector2, Vector2]) -> None:
+        ...
+
     def extend(self, tiles: list[Tile]) -> None:
         for tile in tiles:
             pos = tuple(tile.pos)
@@ -300,12 +328,18 @@ class Chunk:
         global_tile_offset = Vector2(0)
 
         # ! Smart approach
-        ramps, custom_ramps, tiles = [], [], []
+        ramps: list[Ramp] = []
+        custom_ramps: list[CustomRamp] = []
+        tiles: list[Tile] = []
+        custom_tiles: list[CustomTile] = []
+
         for _, tile in self._tiles.items():
             if tile.type in [TileType.RAMP_LEFT, TileType.RAMP_RIGHT]:
                 ramps.append(tile)
             elif tile.type == TileType.RAMP_CUSTOM:
                 custom_ramps.append(tile)
+            elif tile.type == TileType.TILE_CUSTOM:
+                custom_tiles.append(tile)
             else:
                 tiles.append(tile)
 
@@ -328,6 +362,12 @@ class Chunk:
             local_pos = (tile.pos.x % CHUNKSIZE, tile.pos.y % CHUNKSIZE)
             local_pos = (local_pos[0] * TILESIZE, local_pos[1] * TILESIZE + global_tile_offset.y)
             l.append((IMGS[tile.img_idx], local_pos))
+
+        for c_tile in custom_tiles:
+            local_pos = (c_tile.pos.x % CHUNKSIZE, c_tile.pos.y % CHUNKSIZE)
+            local_pos = (local_pos[0] * TILESIZE, local_pos[1] * TILESIZE + global_tile_offset.y)
+            l.append((c_tile.get_pre_render(), local_pos))
+            # print(c_tile.get_pre_render(), c_tile.pre_render_needed())
 
         for c_ramp in custom_ramps:
             local_pos = (c_ramp.pos.x % CHUNKSIZE, c_ramp.pos.y % CHUNKSIZE)
@@ -406,6 +446,7 @@ class TileMap:
         )
 
     def pre_render_chunks(self) -> None:
+        # TODO einen weg finden nur zu prerendern, falls sich was verändert hat. vllt hash von _tiles in _chunks nehmen und das vergleichen?
         [c.pre_render() for c in self._chunks.values()]
 
     def remove(self, pos: Vector2) -> None:
@@ -417,7 +458,6 @@ class TileMap:
 
     def add(self, tile: Tile) -> None:
         related_chunk_pos = (tile.pos.x // self.chunk_size[0], tile.pos.y // self.chunk_size[1])
-        # print(related_chunk_pos)
 
         if related_chunk_pos not in self._chunks:
             # chunk_pos = (related_chunk_pos[0] * TILESIZE, related_chunk_pos[1] * TILESIZE)
@@ -426,6 +466,18 @@ class TileMap:
         chunk = self._chunks[related_chunk_pos]
         chunk.add(tile)
         self.amount_of_tiles += 1
+
+    def add_pixel(self, tile_pos: Vector2, pixel_pos: Vector2) -> None:
+        related_chunk_pos = (tile_pos.x // self.chunk_size[0], tile_pos.y // self.chunk_size[1])
+
+        if related_chunk_pos not in self._chunks:
+            self._chunks[related_chunk_pos] = Chunk(self, related_chunk_pos, size=self.chunk_size)
+
+        chunk = self._chunks[related_chunk_pos]
+        chunk.add_pixel(tile_pos, pixel_pos)
+
+    def extend_pixels(self, data: list[Vector2, Vector2]) -> None:
+        ...
 
     def extend(self, tiles: list[Tile]) -> None:
         for tile in tiles:
@@ -505,8 +557,8 @@ class TileMap:
     def render(self, surf: Surface, target_pos: Vector2, offset: Vector2 = Vector2(0)) -> None:
         target_pos = (target_pos[0] / TILESIZE // self.chunk_size[0], target_pos[1] / TILESIZE // self.chunk_size[1])
 
-        p1 = (int(target_pos[0] - self.culling_offset.x), int(target_pos[1] - self.culling_offset.x))
-        p2 = (int(target_pos[0] + self.culling_offset.y), int(target_pos[1] + self.culling_offset.y))
+        p1 = (int(target_pos[0] - self.culling_offset.x), int(target_pos[1] - self.culling_offset.y))
+        p2 = (int(target_pos[0] + self.culling_offset.x), int(target_pos[1] + self.culling_offset.y))
 
         l = []
         for y in range(p1[1], p2[1] + 1):
@@ -528,7 +580,7 @@ class TileMap:
         for chunk in self._chunks.values():
             serialize_chunk(chunk.copy(), directory)
 
-    @staticmethod
+    @ staticmethod
     def deserialize(directory: str) -> "TileMap":
         # load ...
         chunks: dict[tuple, Chunk] = {}
@@ -542,7 +594,11 @@ class TileMap:
                 c = load_compressed_pickle(data)
             if c:
                 c.parent = tilemap
-                chunks[tuple(c.pos)] = c
+                custom_tiles = [t for _, t in c._tiles.items() if t.type == TileType.TILE_CUSTOM]
+                for c_tile in custom_tiles:
+                    c_tile.pre_render(force_pre_render=True)
+            print(c_tile._pre_renderd_surf)
+            chunks[tuple(c.pos)] = c
         tilemap._chunks = chunks
         tilemap.pre_render_chunks()
         return tilemap
@@ -599,6 +655,11 @@ def render_collision_mesh(surf: Surface, color: Color, t: Tile | Ramp, width: in
 def serialize_chunk(chunk: Chunk, directory: str) -> None:
     chunk.__setattr__("_pre_renderd_surf", None)  # sonst Fehler, pickle kann pygame.Surface nicht bearbeiten
     chunk.__setattr__("parent", None)
+    tiles = chunk._tiles
+    custom_tiles = [t for _, t in tiles.items() if t.type == TileType.TILE_CUSTOM]
+    for c_tile in custom_tiles:
+        c_tile.__setattr__("_pre_renderd_surf", None)
+
     data = save_compressed_pickle(chunk)
 
     file_name = f"{directory}/{str(tuple(chunk.pos))}.data"
