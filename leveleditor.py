@@ -67,7 +67,7 @@ def get_positions() -> list[Vector2]:
 
 
 def get_pixel_positions() -> list[Vector2]:
-    positions = []
+    positions = []  # das sind offset pixel positions
     center = sub_tile_position
 
     if brush_type == 0:  # circle:
@@ -76,12 +76,12 @@ def get_pixel_positions() -> list[Vector2]:
                 pos = Vector2(center.x + x, center.y + y)
                 distance = (pos - center).length()
                 if distance <= brush_size:
-                    positions.append(pos)
+                    positions.append(Vector2(x, y))
     elif brush_type == 1:  # square
         for y in range(-brush_size, brush_size + 1):
             for x in range(-brush_size, brush_size + 1):
                 pos = Vector2(center.x + x, center.y + y)
-                positions.append(pos)
+                positions.append(Vector2(x, y))
 
     return positions
 
@@ -170,11 +170,18 @@ while run:
             tilemap.pre_render_chunks()
         elif mode == 1:
             tt = 0
-            # tilemap.add(CustomTile(tile_position))
-            for position in get_pixel_positions():
-                t1 = time.perf_counter()
-                tilemap.add_pixel(tile_position, position)
-                tt += time.perf_counter() - t1
+            # Old approach # 0.4 sekunden
+            # for position in get_pixel_positions():
+            #     t1 = time.perf_counter()
+            #     tilemap.add_pixel(tile_position, position)
+            #     tt += time.perf_counter() - t1
+
+            # New approach # 0.003 sekunden
+            positions = get_pixel_positions()
+            t1 = time.perf_counter()
+            tilemap.extend_pixels(positions, tile_position, sub_tile_position)
+            tt += time.perf_counter() - t1
+
             tilemap.pre_render_chunks()
             print(tt)
     if clicks[2]:
