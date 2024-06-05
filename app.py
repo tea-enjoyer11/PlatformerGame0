@@ -27,6 +27,9 @@ tiles.append(CustomRamp(Vector2(-11, 9), load_image("assets/custom_ramp_hitbox.p
 tiles.append(CustomRamp(Vector2(-10, 9), load_image("assets/custom_ramp_hitbox.png", flip_x=True), TileType.RAMP_LEFT, img_idx=33))
 tiles.append(CustomRamp(Vector2(-13, 9), load_image("assets/custom_ramp3_hitbox.png", flip_x=True), TileType.RAMP_LEFT, img_idx=55))
 tiles.append(CustomRamp(Vector2(-15, 9), load_image("assets/custom_ramp3_hitbox.png"), TileType.RAMP_RIGHT, img_idx=5))
+custom_tile = CustomTile(Vector2(-17, 9))
+custom_tile.extend_pixels([(i, 5) for i in range(TILESIZE - 1)])
+# tiles.append(custom_tile)
 for x in range(-24, 24):
     for y in range(16):
         tiles.append(Tile(Vector2(x, 10 + y)))

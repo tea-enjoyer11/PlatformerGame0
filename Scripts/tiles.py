@@ -308,60 +308,49 @@ class Chunk:
 
     def extend_pixels(self, data: list[Vector2], start_tile_pos: Vector2, start_pixel_pos: Vector2, color: tuple = (255, 255, 255)) -> None:
         self._last_pre_render_data = self._calc_pre_render_data()
-        start_pixel_pos = Vector2(start_pixel_pos.x % CHUNKSIZE, start_pixel_pos.y % CHUNKSIZE)
+        # start_pixel_pos = Vector2(start_pixel_pos.x % CHUNKSIZE, start_pixel_pos.y % CHUNKSIZE)
         buffer: dict[tuple, list[tuple]] = {tuple(start_tile_pos): []}
 
         SHIFTING_SIZE = TILESIZE - 1
         for offset_pixel in data:
             tile_pos = start_tile_pos.copy()
-            pixel_pos = start_pixel_pos.copy() + offset_pixel.copy()
+            pixel_pos = start_pixel_pos + offset_pixel
 
-            # TODO bug fixen: Wenn pixel_pos durch offset negativ wird, müssen tile_pos und pixel_pos geändert werden
+            # TODO: die überlappenden pixel an chunkbordern fixen!
+            # vllt chunksize varaible noch einbauen.
             if pixel_pos.x < 0:
-                pp = pixel_pos.copy()
-                tp = tile_pos.copy()
                 tile_pos.x -= 1
                 pixel_pos.x += SHIFTING_SIZE
-                print("111111111", pp, tp, "    |    ", pixel_pos, tile_pos)
             elif pixel_pos.x > TILESIZE - 1:
-                pp = pixel_pos.copy()
-                tp = tile_pos.copy()
                 tile_pos.x += 1
                 pixel_pos.x -= SHIFTING_SIZE
-                print("222222222", pp, tp, "    |    ", pixel_pos, tile_pos)
             if pixel_pos.y < 0:
-                pp = pixel_pos.copy()
-                tp = tile_pos.copy()
                 tile_pos.y -= 1
                 pixel_pos.y += SHIFTING_SIZE
-                print("333333333", pp, tp, "    |    ", pixel_pos, tile_pos)
             elif pixel_pos.y > TILESIZE - 1:
-                pp = pixel_pos.copy()
-                tp = tile_pos.copy()
                 tile_pos.y += 1
                 pixel_pos.y -= SHIFTING_SIZE
-                print("444444444", pp, tp, "    |    ", pixel_pos, tile_pos)
 
             tile_pos = tuple(tile_pos)
             if tile_pos not in buffer:
                 buffer[tile_pos] = []
-            buffer[tile_pos].append(tuple(pixel_pos.copy()))
+            buffer[tile_pos].append(tuple(pixel_pos))
 
         print(buffer)
 
-        for pos, data in buffer.items():
+        for pos, data_ in buffer.items():
             pos = (pos[0] % CHUNKSIZE, pos[1] % CHUNKSIZE)
             custom_tile: CustomTile = None
             if pos in self._tiles:
                 if isinstance(self._tiles[pos], CustomTile):
                     custom_tile = self._tiles[pos]
                 else:
-                    custom_tile = CustomTile(start_tile_pos)
+                    custom_tile = CustomTile(pos)
                     self._tiles[pos] = custom_tile
             else:
-                custom_tile = CustomTile(start_tile_pos)
+                custom_tile = CustomTile(pos)
                 self._tiles[pos] = custom_tile
-            custom_tile.extend_pixels(data, color=color)
+            custom_tile.extend_pixels(data_, color=color)
             custom_tile.pre_render()
         self._pre_render_data = self._calc_pre_render_data()
 
@@ -492,6 +481,7 @@ class Chunk:
     def get_pre_render(self, offset: Vector2 = Vector2(0)) -> tuple[Surface, tuple]:
         global_pos = tuple(self.pos)
         global_pos = (global_pos[0] * self.size[0] * TILESIZE - offset[0], global_pos[1] * self.size[1] * TILESIZE - offset[1])
+        print(self._pre_renderd_surf)
         return (self._pre_renderd_surf, global_pos - self.pre_render_offset)
 
 
@@ -594,6 +584,7 @@ class TileMap:
 
         chunk = self._chunks[related_chunk_pos]
         chunk.add_pixel(tile_pos, pixel_pos)
+        self.add_to_pre_render_queue(chunk)
 
     def extend_pixels(self, data: list[Vector2], start_tile_pos: Vector2, start_pixel_pos: Vector2, color: tuple = (255, 255, 255)) -> None:
         related_chunk_pos = (start_tile_pos.x // self.chunk_size[0], start_tile_pos.y // self.chunk_size[1])
@@ -603,6 +594,7 @@ class TileMap:
 
         chunk = self._chunks[related_chunk_pos]
         chunk.extend_pixels(data, start_tile_pos, start_pixel_pos, color=color)
+        self.add_to_pre_render_queue(chunk)
 
     def extend(self, tiles: list[Tile]) -> None:
         for tile in tiles:
@@ -692,6 +684,8 @@ class TileMap:
                 if (x, y) in self._chunks:
                     l.append(self._chunks[(x, y)].get_pre_render(offset))
 
+        # TODO Bug fixen: chunk wird manchmal nicht richtig ge prerendert
+        # hängt wahrscheinlich alles mit dieser verdammten queue zusammen
         surf.fblits(l)
 
         for y in range(p1[1], p2[1] + 1):
