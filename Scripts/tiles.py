@@ -194,7 +194,7 @@ class Chunk:
         self._pre_renderd_surf: Surface = None
         self._pre_renderd_surf_size: Vector2 = None
         self.pre_render_offset = Vector2(0)
-        self._last_pre_render_data = None
+        self._last_pre_render_data = ...  # sollte unterschiedlich zu "_pre_render_data" sein
         self._pre_render_data = None
 
     def copy(self) -> "Chunk":
@@ -405,8 +405,8 @@ class Chunk:
         return [on_top_edge, on_right_edge, on_bottom_edge, on_left_edge]
 
     def pre_render(self):
-        if not self.pre_render_needed():
-            return
+        # if not self.pre_render_needed():
+        #     return
 
         l = []
         global_tile_offset = Vector2(0)
@@ -540,12 +540,12 @@ class TileMap:
         # reinpackt und erst entfernt, wenn diese Funktion durch diese Liste durchgegangen ist.
 
         # New approach
-        while not self._pre_render_queue.empty():
-            c = self._pre_render_queue.get()
-            c.pre_render()
+        # while not self._pre_render_queue.empty():
+        #     c = self._pre_render_queue.get()
+        #     c.pre_render()
 
         # Old approach
-        # [c.pre_render() for c in self._chunks.values()]  # if c.pre_render_needed()]
+        [c.pre_render() for c in self._chunks.values()]  # if c.pre_render_needed()]
 
     def remove(self, pos: Vector2) -> None:
         related_chunk_pos = (pos.x // self.chunk_size[0], pos.y // self.chunk_size[1])
