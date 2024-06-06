@@ -1,11 +1,27 @@
 from pprint import pprint
 from copy import deepcopy
 from itertools import chain
-from queue import Queue
 import os
 from Scripts.CONFIG import *
 from Scripts.CONFIG import Vector2
 from typing import Literal
+
+
+class Queue:
+    def __init__(self) -> None:
+        self._content: list[object] = []
+
+    def empty(self) -> bool:
+        return bool(len(self._content))
+
+    def put(self, obj: object) -> None:
+        if obj not in self._content:
+            self._content.append(obj)
+
+    def get(self) -> object:
+        if not self.empty():
+            return self._content.pop(0)
+        return None
 
 
 NEIGHBOR_OFFSETS = [
@@ -101,7 +117,6 @@ class CustomTile(Tile):
                 pos = (x, y)
                 if pos in self.pixel_data:
                     c = self.pixel_data[pos]
-                    print(c)
                     if c == "black":
                         continue
                     else:
@@ -384,7 +399,7 @@ class Chunk:
         self._pre_render_data = self._calc_pre_render_data()
 
     def _calc_pre_render_data(self) -> None:
-        return chain(self._tiles.items(), self._ghost_tiles.items())
+        return list(chain(self._tiles.items(), self._ghost_tiles.items()))
 
     def pre_render_needed(self) -> bool:
         h1 = hash(self._last_pre_render_data)
@@ -719,7 +734,16 @@ class TileMap:
 
     def serialize(self, directory: str) -> None:
         for chunk in self._chunks.values():
+            prd = chunk._pre_render_data
+            lprd = chunk._last_pre_render_data
+
+            chunk.__setattr__("_pre_render_data", None)
+            chunk.__setattr__("_last_pre_render_data", None)
+
             serialize_chunk(chunk.copy(), directory)
+
+            chunk._pre_render_data = prd
+            chunk._last_pre_render_data = lprd
 
     @ staticmethod
     def deserialize(directory: str) -> "TileMap":
@@ -738,7 +762,6 @@ class TileMap:
                 custom_tiles = [t for _, t in c._tiles.items() if t.type == TileType.TILE_CUSTOM]
                 for c_tile in custom_tiles:
                     c_tile.pre_render(force_pre_render=True)
-            print(c_tile._pre_renderd_surf)
             chunks[tuple(c.pos)] = c
         tilemap._chunks = chunks
         tilemap.pre_render_chunks()
