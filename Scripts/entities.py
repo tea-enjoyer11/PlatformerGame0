@@ -12,20 +12,24 @@ class PhysicsEntity:
         self.size = size
         self.vel = Vector2(0)
         self.rect = Rect(pos.x, pos.y, size.x, size.y)
-        self.min_step_height = 1.0  # in TILESIZE Größe gerechnet
+        self.min_step_height = 0.1  # in TILESIZE Größe gerechnet
 
         self._collision_types = {'top': False, 'bottom': False, 'right': False, 'left': False}
         self._last_collision_types = {'top': False, 'bottom': False, 'right': False, 'left': False}
 
-    def _is_steppable(self, tile: Rect):
+    def _is_steppable(self, tile: Rect) -> bool:
         top_point = tile.y - tile.height
         # print(top_point - self.pos.y <= self.min_step_height * TILESIZE)
         return top_point - self.pos.y <= self.min_step_height * TILESIZE and self._last_collision_types["bottom"] and (self._last_collision_types["right"] or self._last_collision_types["left"])
 
-    def _is_steppable_ramp(self, ramp: Ramp | CustomRamp):
+    def _is_steppable_ramp(self, ramp: Ramp | CustomRamp) -> bool:
         if isinstance(ramp, Ramp):
             return TILESIZE * ramp.elevation <= self.min_step_height * TILESIZE
         return ramp.size.y <= self.min_step_height * TILESIZE
+
+    def _is_steppable_custom_tile(self, c_tile: CustomTile, tile_height: float) -> bool:
+        steppable = (TILESIZE - tile_height) < self.min_step_height * TILESIZE
+        return steppable
 
 
 class Player(PhysicsEntity):
@@ -155,6 +159,44 @@ class Player(PhysicsEntity):
                         self.pos[1] = self.rect.y
                         self.collision_types['bottom'] = True
 
+    def _handle_custom_tiles_colls(self, movement, dt: float, custom_tiles: list[CustomTile]) -> None:
+        for c_tile in custom_tiles:
+            hitbox = tile_rect(c_tile)
+            tile_collision = self.rect.colliderect(hitbox)
+
+            if tile_collision:
+                rel_x = self.rect.x - hitbox.x
+
+                rel_x = max(1, min(rel_x, c_tile.size[0]))  # sonst gibt es fehler
+                tile_height = c_tile.height_data[rel_x - 1]  # mit height und unterschied zur current height kann man min_step_height einbauen
+
+                steppable = self._is_steppable_custom_tile(c_tile, tile_height)
+
+                if not steppable:
+                    border_collision_threshold = 5
+                    rel_x_border = self.rect.x - (hitbox.x + TILESIZE)  # wie nah ist der Spieler an der Kante?
+                    if movement[0] < 0 and (0 < abs(rel_x_border) <= border_collision_threshold) and not steppable:
+                        tile_height = 0
+                        self.rect.left = hitbox.right
+                        self.collision_types['left'] = True
+                        self.pos[0] = self.rect.x
+                    elif self.rect.x < hitbox.x:
+                        rel_x_border = self.rect.x - hitbox.x + self.rect.width
+                        if movement[0] > 0 and (0 < abs(rel_x_border) <= border_collision_threshold) and not steppable:
+                            tile_height = 0
+                            self.rect.right = hitbox.left
+                            self.collision_types['right'] = True
+                            self.pos[0] = self.rect.x
+
+                if tile_height:
+                    adjust_height = TILESIZE + (c_tile.size[1] - TILESIZE)
+                    target_y = hitbox.y + adjust_height - tile_height
+                    if self.rect.bottom > target_y:
+                        self.rect.bottom = target_y
+
+                        self.pos[1] = self.rect.y
+                        self.collision_types['bottom'] = True
+
     def move(self, movement: Sequence[float], tiles: list[Tile], dt: float, noclip: bool = False):
         self._last_pos = self.pos.copy()
         self._last_collision_types = self._collision_types.copy()
@@ -171,11 +213,13 @@ class Player(PhysicsEntity):
         normal_tiles = [tile_rect(t) for t in tiles if t.type == TileType.TILE]
         ramps: list[Ramp] = [t for t in tiles if t.type in [TileType.RAMP_LEFT, TileType.RAMP_RIGHT]]
         custom_ramps: list[CustomRamp] = [t for t in tiles if t.type is TileType.RAMP_CUSTOM]
+        custom_tiles: list[CustomTile] = [t for t in tiles if t.type is TileType.TILE_CUSTOM]
 
         # handle collisions
         self._handle_standart_colls(movement, dt, normal_tiles)
         self._handle_ramps_colls(movement, dt, ramps)
         self._handle_custom_ramps_colls(movement, dt, custom_ramps)
+        self._handle_custom_tiles_colls(movement, dt, custom_tiles)
 
         # return collisions
         return self.collision_types.copy()

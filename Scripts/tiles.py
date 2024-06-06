@@ -63,7 +63,7 @@ class Tile:
 
 
 class CustomTile(Tile):
-    __slots__ = ("pixel_data", "_pre_renderd_surf", "_last_pre_render_pixel_data")
+    __slots__ = ("pixel_data", "_pre_renderd_surf", "_last_pre_render_pixel_data", "height_data")
 
     def __init__(self, pos: Vector2, tile_type: TileType = TileType.TILE_CUSTOM) -> None:
         super().__init__(pos, tile_type)
@@ -75,6 +75,8 @@ class CustomTile(Tile):
 
         self._pre_renderd_surf: Surface = None
         self._last_pre_render_pixel_data: dict[tuple, str] = {}
+
+        self.height_data: dict[int, int] = {}
 
     def add_pixel(self, pos: Vector2) -> None:
         # pos_ = pos // TILESIZE
@@ -89,6 +91,23 @@ class CustomTile(Tile):
         self._last_pre_render_pixel_data = deepcopy(self.pixel_data)
         for pos in data:
             self.pixel_data[tuple(pos)] = color
+
+    def _calc_heigh_data(self) -> None:
+        ret: dict[int, int] = {}
+
+        for x in range(TILESIZE):
+            v = 0
+            for y in range(TILESIZE):
+                pos = (x, y)
+                if pos in self.pixel_data:
+                    c = self.pixel_data[pos]
+                    print(c)
+                    if c == "black":
+                        continue
+                    else:
+                        v = TILESIZE - y
+            ret[x] = v
+        self.height_data = ret
 
     def remove_pixel(self, pos: Vector2) -> None:
         # pos_ = pos // TILESIZE
@@ -110,6 +129,8 @@ class CustomTile(Tile):
             for val, col in self.pixel_data.items():
                 self._pre_renderd_surf.set_at(val, col)
             self._pre_renderd_surf.set_colorkey((0, 0, 0))
+
+            self._calc_heigh_data()
 
     def get_pre_render(self) -> Surface:
         return self._pre_renderd_surf
@@ -149,7 +170,7 @@ class CustomRamp(Tile):
         self.size = Vector2(hitbox.get_size())
 
     @staticmethod
-    def parse_data(hitbox: Surface) -> ...:
+    def parse_data(hitbox: Surface) -> dict[int, int]:
         ret: dict[int, int] = {}
         # ret ist ein dict wo, die x position als key
         # und die höhe der ramp an der x position als value gespeichert wird
@@ -481,7 +502,7 @@ class Chunk:
     def get_pre_render(self, offset: Vector2 = Vector2(0)) -> tuple[Surface, tuple]:
         global_pos = tuple(self.pos)
         global_pos = (global_pos[0] * self.size[0] * TILESIZE - offset[0], global_pos[1] * self.size[1] * TILESIZE - offset[1])
-        print(self._pre_renderd_surf)
+        # print(self._pre_renderd_surf)
         return (self._pre_renderd_surf, global_pos - self.pre_render_offset)
 
 
