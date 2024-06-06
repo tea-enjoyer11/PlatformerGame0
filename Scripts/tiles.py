@@ -734,16 +734,7 @@ class TileMap:
 
     def serialize(self, directory: str) -> None:
         for chunk in self._chunks.values():
-            prd = chunk._pre_render_data
-            lprd = chunk._last_pre_render_data
-
-            chunk.__setattr__("_pre_render_data", None)
-            chunk.__setattr__("_last_pre_render_data", None)
-
             serialize_chunk(chunk.copy(), directory)
-
-            chunk._pre_render_data = prd
-            chunk._last_pre_render_data = lprd
 
     @ staticmethod
     def deserialize(directory: str) -> "TileMap":
@@ -829,15 +820,3 @@ def serialize_chunk(chunk: Chunk, directory: str) -> None:
     file_name = f"{directory}/{str(tuple(chunk.pos))}.data"
     with open(file_name, "wb+") as f:
         f.write(data)
-
-
-def deserialize_chunk(chunk: Chunk, file_path: str) -> Chunk | None:
-    data: bytes = None
-
-    with open(file_path, "rb") as f:
-        data = f.read()
-
-    if data:
-        chunk = load_compressed_pickle(data)
-        return chunk
-    return None

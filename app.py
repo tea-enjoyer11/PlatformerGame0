@@ -51,7 +51,8 @@ noclip = False
 scroll = Vector2(0)
 pygame_gui_manager = pygame_gui.ui_manager.UIManager((800, 600))
 tile_map = TileMap()
-tile_map.extend(tiles)
+# tile_map.extend(tiles)
+tile_map = TileMap.deserialize("saves/t1")
 tile_map.pre_render_chunks()
 
 img_cache = ImageCache(load_image)

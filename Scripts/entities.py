@@ -221,5 +221,12 @@ class Player(PhysicsEntity):
         self._handle_custom_ramps_colls(movement, dt, custom_ramps)
         self._handle_custom_tiles_colls(movement, dt, custom_tiles)
 
+        # TODO bugs fixen!
+        # 1. wenn man auf einer geraden linie läuft und springt, wird man beim laden zurück gebuggt.
+        # 2. Manchmal werden falsche tiles als naheliegende erkannt, vorallem an chunkbordern.
+        # 3. wenn man gegen ein tile läuft, dass man nicht hoch gehen kann, bugt man andauernt nach links und rechts.
+        # 4. Custom tiles werden nicht richtig gespeichert/geladen. Die Position im chunk ist zwar richtig, aber die collision position ist falsch
+        # 5. speicher dauer verkürzen. Es dauert eine halbe Sekunde pro chunk manchmal.... (dann auch async machen, sodass man trotzdem noch weiter machen kann)
+
         # return collisions
         return self.collision_types.copy()
