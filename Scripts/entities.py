@@ -12,7 +12,7 @@ class PhysicsEntity:
         self.size = size
         self.vel = Vector2(0)
         self.rect = Rect(pos.x, pos.y, size.x, size.y)
-        self.min_step_height = 0.1  # in TILESIZE Größe gerechnet
+        self.min_step_height = 22  # in TILESIZE Größe gerechnet
 
         self._collision_types = {'top': False, 'bottom': False, 'right': False, 'left': False}
         self._last_collision_types = {'top': False, 'bottom': False, 'right': False, 'left': False}

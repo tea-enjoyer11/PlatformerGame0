@@ -27,6 +27,12 @@ brush_type = 0
 brush_types = [0, 1]  # 0=circle, 1=square
 brush_type_idx = 0
 brush_type_desc = ["circle", "square"]
+tool = 0
+tools = [0, 1]
+tools_desc = ["brush", "rect"]
+rect_tool_start: Vector2 = None
+rect_tool_end: Vector2 = None
+do_rect_tool = False
 
 
 def vector_equal(v1: Vector2, v2: Vector2) -> bool:
@@ -126,6 +132,8 @@ while run:
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_r:
                 offset = Vector2(0)
+            if event.key == pygame.K_t:
+                tool = (tool + 1) % len(tools)
             if event.key == pygame.K_o:
                 save()
             if event.key == pygame.K_i:
@@ -140,6 +148,17 @@ while run:
             if event.key == pygame.K_j:
                 brush_type_idx = (brush_type_idx + 1) % len(brush_types)
                 brush_type = brush_types[brush_type_idx]
+
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            if tool == 1:  # rect tool
+                rect_tool_start = mPos + offset
+        elif event.type == pygame.MOUSEBUTTONUP:
+            if tool == 1:  # rect tool
+                rect_tool_end = mPos
+                do_rect_tool = True
+
+    if rect_tool_start and not do_rect_tool:
+        rect_tool_end = mPos
 
     keys = pygame.key.get_pressed()
     clicks = pygame.mouse.get_pressed()
@@ -167,58 +186,91 @@ while run:
         offset.x += 2 * (1 + int(ctrl) * 4) * 1 / 4 * dt
 
     if clicks[0]:
-        if mode == 0:
-            for position in get_positions():
-                tilemap.add(Tile(position))
-            tilemap.pre_render_chunks()
-        elif mode == 1:
-            tt = 0
-            # Old approach # 0.4 sekunden
-            # for position in get_pixel_positions():
-            #     t1 = time.perf_counter()
-            #     tilemap.add_pixel(tile_position, position)
-            #     tt += time.perf_counter() - t1
+        if tool == 0:
+            if mode == 0:
+                for position in get_positions():
+                    tilemap.add(Tile(position))
+                tilemap.pre_render_chunks()
+            elif mode == 1:
+                tt = 0
+                # Old approach # 0.4 sekunden
+                # for position in get_pixel_positions():
+                #     t1 = time.perf_counter()
+                #     tilemap.add_pixel(tile_position, position)
+                #     tt += time.perf_counter() - t1
 
-            # New approach # 0.003 sekunden
-            positions = get_pixel_positions()
-            t1 = time.perf_counter()
-            tilemap.extend_pixels(positions, tile_position, sub_tile_position, color=(255, 255, 255))
-            tt += time.perf_counter() - t1
+                # New approach # 0.003 sekunden
+                positions = get_pixel_positions()
+                t1 = time.perf_counter()
+                tilemap.extend_pixels(positions, tile_position, sub_tile_position, color=(255, 255, 255))
+                tt += time.perf_counter() - t1
 
-            tilemap.pre_render_chunks()
-            print(tt)
+                tilemap.pre_render_chunks()
+                print(tt)
     if clicks[2]:
-        if mode == 0:
-            for position in get_positions():
-                tilemap.remove(position)
-            tilemap.pre_render_chunks()
-        elif mode == 1:
-            tt = 0
-            positions = get_pixel_positions()
-            t1 = time.perf_counter()
-            tilemap.extend_pixels(positions, tile_position, sub_tile_position, color=(0, 0, 0))
-            tt += time.perf_counter() - t1
+        if tool == 0:
+            if mode == 0:
+                for position in get_positions():
+                    tilemap.remove(position)
+                tilemap.pre_render_chunks()
+            elif mode == 1:
+                tt = 0
+                positions = get_pixel_positions()
+                t1 = time.perf_counter()
+                tilemap.extend_pixels(positions, tile_position, sub_tile_position, color=(0, 0, 0))
+                tt += time.perf_counter() - t1
 
-            tilemap.pre_render_chunks()
-            print(tt)
+                tilemap.pre_render_chunks()
+                print(tt)
 
+    if do_rect_tool:
+        print(rect_tool_start, rect_tool_end)
+
+        tile_pos_start = rect_tool_start // TILESIZE
+        tile_pos_end = (rect_tool_end + offset) // TILESIZE
+
+        # ...
+
+        print(tile_pos_start, tile_pos_end)
+
+        rect_tool_start = None
+        rect_tool_end = None
+        do_rect_tool = False
+
+    #
+    # Render Part
+    #
     screen.fill((92, 95, 89))
 
     render_grid()
     tilemap.render(screen, mPos + offset, offset=offset)
     render_selected_tile()
 
+    # rect tool
+    if rect_tool_start:
+        # inversing rect sodass auch links und nach oben gezogen werden kann
+        x = rect_tool_start.x - offset.x
+        y = rect_tool_start.y - offset.y
+        w = rect_tool_end.x - rect_tool_start.x + offset.x
+        h = rect_tool_end.y - rect_tool_start.y + offset.y
+        r = Rect(x, y, w, h)
+        print(r)
+        pygame.draw.rect(screen, "yellow", r, 2)
+
+    # ui
     draw_text(screen, f"Load with 'I' | Save wiht 'O'", (500, 10), color="yellow", background_color="black")
     draw_text(screen, f"Cycle placing modes with 'G'", (500, 40), color="yellow", background_color="black")
     draw_text(screen, f"Cycle brush sizes with 'H'", (500, 70), color="yellow", background_color="black")
     draw_text(screen, f"Cycle brush types with 'J'", (500, 100), color="yellow", background_color="black")
+    draw_text(screen, f"Cycle tools with 'T'", (500, 130), color="yellow", background_color="black")
     draw_text(screen, f"Num Tiles: {tilemap.amount_of_tiles} | Num Chunks: {tilemap.amount_of_chunks}", (10, 10), background_color="black")
     draw_text(screen, f"Offset: {offset}", (10, 40), background_color="black")
     draw_text(screen, f"Tile Offset: {Vector2(x_off, y_off)}", (10, 70), background_color="black")
     draw_text(screen, f"TILEPOS: {tile_position} SUBTILEPOS: {sub_tile_position}", (10, 110), background_color="black")
     draw_text(screen, f"Mode: {modes_desc[mode]}", (10, 140), background_color="black")
-    draw_text(screen, f"Brush strength: {brush_sizes[brush_size_idx]}", (10, 270), background_color="black")
     draw_text(screen, f"Brush type: {brush_type_desc[brush_type_idx]}", (10, 200), background_color="black")
+    draw_text(screen, f"Brush strength: {brush_sizes[brush_size_idx]}", (10, 230), background_color="black")
+    draw_text(screen, f"Tool: {tools_desc[tool]}", (10, 280), color="yellow", background_color="black")
 
     pygame.display.flip()
     pygame.display.set_caption(f"{clock.get_fps():.0f}")

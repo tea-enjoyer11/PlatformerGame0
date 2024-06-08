@@ -113,6 +113,7 @@ class CustomTile(Tile):
 
         for x in range(TILESIZE):
             v = 0
+            t = 0  # thickness
             for y in range(TILESIZE):
                 pos = (x, y)
                 if pos in self.pixel_data:
@@ -120,8 +121,12 @@ class CustomTile(Tile):
                     if c == "black":
                         continue
                     else:
-                        v = TILESIZE - y
-            ret[x] = v
+                        v = y
+                        t += 1
+            if t == 0:
+                ret[x] = 0
+            else:
+                ret[x] = TILESIZE - v + t
         self.height_data = ret
 
     def remove_pixel(self, pos: Vector2) -> None:
