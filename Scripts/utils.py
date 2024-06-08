@@ -1,3 +1,4 @@
+import numpy as np
 from pygame import Vector2, Surface, Color
 import pygame
 import os
@@ -140,3 +141,10 @@ def save_compressed_pickle(obj: object, compresslevel: int = 9) -> bytes:
 
 def load_compressed_pickle(obj: bytes) -> object:
     return pickle.loads(gzip.decompress(obj))
+
+
+def surf_is_black(surf: Surface) -> bool:
+    surf.lock()
+    pixel_array = pygame.surfarray.array3d(surf)
+    surf.unlock()
+    return np.all(pixel_array == 0)
