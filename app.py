@@ -172,9 +172,9 @@ while run:
                 noclip = not noclip
                 p.vel.y = 0
             if event.key == pygame.K_UP:
-                dt_multiplicator = min(5, dt_multiplicator + 0.5)
+                dt_multiplicator = min(5, dt_multiplicator + 0.25)
             if event.key == pygame.K_DOWN:
-                dt_multiplicator = max(0, dt_multiplicator - 0.5)
+                dt_multiplicator = max(0, dt_multiplicator - 0.25)
             if event.key == pygame.K_r:
                 p.pos = Vector2(200, 50)
                 p.vel.y = 0

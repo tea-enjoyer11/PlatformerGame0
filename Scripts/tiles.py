@@ -372,20 +372,21 @@ class Chunk:
                 buffer[tile_pos] = []
             buffer[tile_pos].append(tuple(pixel_pos))
 
-        print(buffer)
+        # print(list(buffer.keys()))  # global tile pos
+        # print([(pos[0] % CHUNKSIZE, pos[1] % CHUNKSIZE) for pos in buffer])  # tile pos in chunk
 
         for pos, data_ in buffer.items():
-            pos = (pos[0] % CHUNKSIZE, pos[1] % CHUNKSIZE)
+            local_pos = (pos[0] % CHUNKSIZE, pos[1] % CHUNKSIZE)
             custom_tile: CustomTile = None
-            if pos in self._tiles:
-                if isinstance(self._tiles[pos], CustomTile):
-                    custom_tile = self._tiles[pos]
+            if local_pos in self._tiles:
+                if isinstance(self._tiles[local_pos], CustomTile):
+                    custom_tile = self._tiles[local_pos]
                 else:
                     custom_tile = CustomTile(pos)
-                    self._tiles[pos] = custom_tile
+                    self._tiles[local_pos] = custom_tile
             else:
                 custom_tile = CustomTile(pos)
-                self._tiles[pos] = custom_tile
+                self._tiles[local_pos] = custom_tile
             custom_tile.extend_pixels(data_, color=color)
             custom_tile.pre_render()
         self._pre_render_data = self._calc_pre_render_data()
@@ -753,6 +754,10 @@ class TileMap:
                 custom_tiles = [t for _, t in c._tiles.items() if t.type == TileType.TILE_CUSTOM]
                 for c_tile in custom_tiles:
                     c_tile.pre_render(force_pre_render=True)
+
+                for p, t in c._tiles.items():
+                    if t.type == TileType.TILE_CUSTOM:
+                        print(p, t.pos, p == tuple(t.pos))
             chunks[tuple(c.pos)] = c
         tilemap._chunks = chunks
         tilemap.pre_render_chunks()
@@ -815,6 +820,9 @@ def serialize_chunk(chunk: Chunk, directory: str) -> None:
     for c_tile in custom_tiles:
         c_tile.__setattr__("_pre_renderd_surf", None)
 
+    for p, t in tiles.items():
+        if t.type == TileType.TILE_CUSTOM:
+            print(p, t.pos, p == tuple(t.pos))
     data = save_compressed_pickle(chunk)
 
     file_name = f"{directory}/{str(tuple(chunk.pos))}.data"

@@ -93,6 +93,9 @@ def load() -> TileMap:
 def save(do_backup: bool = False):
     if do_backup:
         backup()
+    for file in os.scandir(f"saves/t1"):
+        if file.name.endswith(".data"):
+            os.unlink(file.path)
     tilemap.serialize(f"saves/t1")
 
 
