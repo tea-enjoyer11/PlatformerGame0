@@ -1,5 +1,6 @@
 from Scripts.CONFIG import *
 from Scripts.tiles import *
+from Scripts.sprites import Animation, cut_spritesheet_row
 
 
 class PhysicsEntity:
@@ -35,6 +36,15 @@ class PhysicsEntity:
 class Player(PhysicsEntity):
     def __init__(self, pos: Vector2) -> None:
         super().__init__(pos, Vector2(TILESIZE // 2, TILESIZE))
+
+        self.animation = Animation()
+        path = "assets/entities/AnimationSheet_Character.png"
+        s = Vector2(32)
+        self.animation.add_state("idle", cut_spritesheet_row(path, s, 0))
+        self.animation.add_state("walk", cut_spritesheet_row(path, s, 2))
+        self.animation.add_state("run", cut_spritesheet_row(path, s, 3))
+        self.animation.add_state("jump_init", cut_spritesheet_row(path, s, 5, max_frames=4), looping=False)
+        self.animation.state = "run"
 
     def _handle_standart_colls(self, movement, dt: float, normal_tiles: list[Tile]) -> None:
         self.pos[0] += movement[0] * dt
@@ -230,3 +240,15 @@ class Player(PhysicsEntity):
 
         # return collisions
         return self.collision_types.copy()
+
+    def update(self, dt: float) -> None:
+        self.animation.update(dt, change=10)
+
+    def set_state(self, state: str) -> None:
+        self.animation.state = state
+
+    def render(self, surface: Surface, offset: Vector2 = Vector2(0)) -> None:
+        img = self.animation.img()
+        if img:
+            image_offset = Vector2(8, 0)
+            surface.blit(img, Vector2(self.rect.topleft) - offset - image_offset)

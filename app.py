@@ -139,6 +139,8 @@ while run:
 
     tile_map.render(screen, p.pos, offset=scroll)
     pygame.draw.rect(screen, "blue", Rect(Vector2(p.rect.topleft) - scroll, p.rect.size))
+    p.update(dt)
+    p.render(screen, scroll)
 
     for tile in close_tiles:
         render_collision_mesh(screen, "yellow", tile, offset=scroll)
@@ -168,6 +170,7 @@ while run:
                 down = True
             if event.key == pygame.K_SPACE:
                 p.vel.y = -jumpforce
+                p.set_state("jump_init")
             if event.key == pygame.K_TAB:
                 noclip = not noclip
                 p.vel.y = 0

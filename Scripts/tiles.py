@@ -350,7 +350,8 @@ class Chunk:
     def extend_pixels(self, data: list[Vector2], start_tile_pos: Vector2, start_pixel_pos: Vector2, color: tuple = (255, 255, 255)) -> None:
         self._last_pre_render_data = self._calc_pre_render_data()
         # start_pixel_pos = Vector2(start_pixel_pos.x % CHUNKSIZE, start_pixel_pos.y % CHUNKSIZE)
-        buffer: dict[tuple, list[tuple]] = {tuple(start_tile_pos): []}
+        buffer1: dict[tuple, list[tuple]] = {tuple(start_tile_pos): []}
+        buffer2: dict[tuple, dict[tuple, list[tuple]]] = {}
 
         SHIFTING_SIZE = TILESIZE - 1
         for offset_pixel in data:
@@ -373,14 +374,14 @@ class Chunk:
                 pixel_pos.y -= SHIFTING_SIZE
 
             tile_pos = tuple(tile_pos)
-            if tile_pos not in buffer:
-                buffer[tile_pos] = []
-            buffer[tile_pos].append(tuple(pixel_pos))
+            if tile_pos not in buffer1:
+                buffer1[tile_pos] = []
+            buffer1[tile_pos].append(tuple(pixel_pos))
 
         # print(list(buffer.keys()))  # global tile pos
         # print([(pos[0] % CHUNKSIZE, pos[1] % CHUNKSIZE) for pos in buffer])  # tile pos in chunk
 
-        for pos, data_ in buffer.items():
+        for pos, data_ in buffer1.items():
             local_pos = (pos[0] % CHUNKSIZE, pos[1] % CHUNKSIZE)
             custom_tile: CustomTile = None
             if local_pos in self._tiles:
@@ -393,7 +394,8 @@ class Chunk:
                 custom_tile = CustomTile(pos)
                 self._tiles[local_pos] = custom_tile
             custom_tile.extend_pixels(data_, color=color)
-            custom_tile.pre_render()
+            custom_tile.pre_render(force_pre_render=True)
+
         self._pre_render_data = self._calc_pre_render_data()
 
     def extend(self, tiles: list[Tile]) -> None:
@@ -514,6 +516,7 @@ class Chunk:
         surf = Surface((w + global_tile_offset.x, h + global_tile_offset.y))
         surf.set_colorkey("black")
 
+        # print(l)
         surf.fblits(l)
 
         self._pre_renderd_surf = surf
