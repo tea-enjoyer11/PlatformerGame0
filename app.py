@@ -9,6 +9,7 @@ from Scripts.CONFIG import *
 from Scripts.utils import load_image, draw_text
 from Scripts.particles import ParticleGroup, ImageCache, CircleParticle, LeafParticle
 from Scripts.entities import Player
+from Scripts.timer import TimerManager
 
 # generate test map
 # tiles: list[Ramp | Tile] = [Tile(Vector2(0, 0)), Ramp('red', Vector2(3, 8), TileType.RAMP_RIGHT), Ramp('red', Vector2(5, 8), TileType.RAMP_RIGHT), Ramp('red', Vector2(7, 8), TileType.RAMP_LEFT, 0.5), Tile('red', Vector2(6, 8)), Tile('red', Vector2(4, 6)), Ramp('red', Vector2(4, 5), TileType.RAMP_LEFT), Tile('red', Vector2(3, 5)), Tile(Vector2(11, 8)), Tile(Vector2(14, 8)), Tile(Vector2(14, 7))]
@@ -37,6 +38,7 @@ for x in range(-24, 24):
 p = Player(Vector2(200, 500))
 
 
+timermanager = TimerManager()
 right = False
 left = False
 up = False
@@ -57,7 +59,6 @@ tile_map.pre_render_chunks()
 
 img_cache = ImageCache(load_image)
 particle_group = ParticleGroup(img_cache)
-
 # renderer = Renderer()
 
 # region Slider setup
@@ -137,9 +138,11 @@ while run:
     if (collisions['bottom']) or (collisions['top']) and not noclip:
         p.vel.y = 0
 
+    timermanager.update()
+    p.update(dt)
+
     tile_map.render(screen, p.pos, offset=scroll)
     pygame.draw.rect(screen, "blue", Rect(Vector2(p.rect.topleft) - scroll, p.rect.size))
-    p.update(dt)
     p.render(screen, scroll)
 
     for tile in close_tiles:

@@ -1,6 +1,7 @@
 from Scripts.CONFIG import *
 from Scripts.tiles import *
-from Scripts.sprites import Animation, cut_spritesheet_row
+from Scripts.sprites import Animation, cut_spritesheet_row, cut_from_spritesheet
+from Scripts.timer import Timer
 
 
 class PhysicsEntity:
@@ -44,7 +45,9 @@ class Player(PhysicsEntity):
         self.animation.add_state("walk", cut_spritesheet_row(path, s, 2))
         self.animation.add_state("run", cut_spritesheet_row(path, s, 3))
         self.animation.add_state("jump_init", cut_spritesheet_row(path, s, 5, max_frames=4), looping=False)
-        self.animation.state = "run"
+        self.animation.add_state("jump_fall", cut_spritesheet_row(path, s, 5, max_frames=2, starting_frame=5), looping=False)
+
+        self.animation.state = "idle"
 
     def _handle_standart_colls(self, movement, dt: float, normal_tiles: list[Tile]) -> None:
         self.pos[0] += movement[0] * dt
@@ -244,8 +247,19 @@ class Player(PhysicsEntity):
     def update(self, dt: float) -> None:
         self.animation.update(dt, change=10)
 
+        # if abs(self.vel.y) > 5:
+        #     self.set_state("jump_max")
+
+        if self.collision_types["bottom"]:
+            self.set_state("jump_fall")
+
+        print(self.animation.over, self.animation.state)
+
     def set_state(self, state: str) -> None:
         self.animation.state = state
+
+    def get_state(self) -> str:
+        return self.animation.state
 
     def render(self, surface: Surface, offset: Vector2 = Vector2(0)) -> None:
         img = self.animation.img()

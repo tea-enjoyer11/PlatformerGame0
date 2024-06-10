@@ -26,7 +26,7 @@ def cut_spritesheet(path_or_image: str | Surface, img_size: Vector2, max_frames:
     return ret
 
 
-def cut_spritesheet_row(path_or_image: str | Surface, img_size: Vector2, row_index: int, max_frames: int = -1) -> list[Surface]:
+def cut_spritesheet_row(path_or_image: str | Surface, img_size: Vector2, row_index: int, max_frames: int = -1, starting_frame: int = 0) -> list[Surface]:
     if isinstance(path_or_image, str):
         sheet = load_image(path_or_image)
     elif isinstance(path_or_image, Surface):
@@ -38,7 +38,12 @@ def cut_spritesheet_row(path_or_image: str | Surface, img_size: Vector2, row_ind
     sheet_size = Vector2(sheet.get_size())
     i = 0
 
-    for x in range(int(sheet_size.x / img_size.x)):
+    max_x = int(sheet_size.x / img_size.x)
+    for x in range(max_x):
+        x += starting_frame
+        if x > max_x:
+            break
+        print(Rect(x * img_size.x, row_index * img_size.y, img_size.x, img_size.y))
         img = sheet.subsurface(Rect(x * img_size.x, row_index * img_size.y, img_size.x, img_size.y))
         i += 1
         if not surf_is_black(img):
@@ -47,6 +52,19 @@ def cut_spritesheet_row(path_or_image: str | Surface, img_size: Vector2, row_ind
             break
 
     return ret
+
+
+def cut_from_spritesheet(path_or_image: str | Surface, img_size: Vector2, pos: Vector2) -> Surface:
+    if isinstance(path_or_image, str):
+        sheet = load_image(path_or_image)
+    elif isinstance(path_or_image, Surface):
+        sheet = path_or_image
+    else:
+        raise TypeError("path_or_image has to be of type <str> or <pygame.Surface>")
+
+    img = sheet.subsurface(pos.x * img_size.x, pos.y * img_size.y, img_size.x, img_size.y)
+    img.set_colorkey((0, 0, 0))
+    return img
 
 
 class Animation:
@@ -69,6 +87,12 @@ class Animation:
     @state.setter
     def state(self, state: str) -> None:
         self.__state = state
+
+    @property
+    def over(self) -> bool:
+        if self.states_looping[self.__state]:  # looping
+            return False
+        return self.index == len(self.states[self.__state]) - 1
 
     def update(self, dt: float, change: float = 1.0) -> None:
         if self.states_looping[self.__state]:  # looping
