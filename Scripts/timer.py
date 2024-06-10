@@ -1,5 +1,6 @@
 import pygame
-from typing import Callable
+from typing import Callable, Any
+from queue import Queue, Empty
 
 
 class TimerManager:
@@ -24,14 +25,16 @@ class TimerManager:
 
 
 class Timer:
-    __slots__ = ("duration", "func", "repeat", "start_time", "active")
+    __slots__ = ("duration", "repeat", "start_time", "active", "_start_hooks", "_end_hooks")
 
-    def __init__(self, duration: float, func: Callable = None, repeat: bool = None, autostart: bool = False) -> None:
+    def __init__(self, duration: float, repeat: bool = None, autostart: bool = False) -> None:
         self.duration = duration
-        self.func = func
         self.repeat = repeat
         self.start_time = 0
         self.active = False
+        self._start_hooks: Queue[Callable[..., Any]] = Queue()
+        self._end_hooks: Queue[Callable[..., Any]] = Queue()
+        # Eine Queue hier könnte scheclt sein, falls der timer auf autostart ist. Queue habe ich nur genommen für FIFO (First in, First out). Sonst Liste Nehmen
 
         if autostart:
             self.activate()
@@ -47,6 +50,10 @@ class Timer:
     def activate(self):
         self.active = True
         self.start_time = pygame.time.get_ticks()
+        self._execute_hooks(self._start_hooks)
+
+    def end(self) -> None:
+        self._execute_hooks(self._end_hooks)
 
     def deactivate(self):
         self.active = False
@@ -56,6 +63,61 @@ class Timer:
 
     def update(self, /):
         if pygame.time.get_ticks() - self.start_time >= self.duration:
-            if self.func and self.start_time != 0:
-                self.func()
+            if self.start_time != 0:
+                self.end()
             self.deactivate()
+
+    def add_start_hook(self, hook: Callable):
+        self._start_hooks.put(hook)
+        # print("Added start hook:", hook.__name__)
+
+    def add_end_hook(self, hook: Callable):
+        self._end_hooks.put(hook)
+        # print("Added end hook:", hook.__name__)
+
+    def _execute_hooks(self, hooks: Queue[Callable[..., Any]]) -> None:
+        while not hooks.empty():
+            try:
+                hook = hooks.get_nowait()
+                hook()
+            except Empty:
+                pass
+
+
+def call_on_timer_start(timer: Timer):
+    def decorator(func: Callable):
+        timer.add_start_hook(func)
+        return func
+    return decorator
+
+
+def call_on_timer_end(timer: Timer):
+    def decorator(func: Callable):
+        timer.add_end_hook(func)
+        return func
+    return decorator
+
+
+if __name__ == "__main__":
+    pygame.init()
+
+    timermanager = TimerManager()
+    timer = Timer(2000)
+
+    @call_on_timer_start(timer)
+    def test1():
+        print("test1 called")
+
+    @call_on_timer_end(timer)
+    def test2():
+        print("test2 called")
+
+    screen = pygame.display.set_mode((100, 100))
+    clock = pygame.time.Clock()
+    timer.activate()
+    while True:
+        dt = clock.tick(60) * 0.001
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
+                exit()
+        timermanager.update()
