@@ -1,5 +1,5 @@
 import pygame
-from pygame import Vector2, Color, Rect, Surface
+from pygame import Vector2, Color, Rect, Surface, FRect
 from enum import Enum, auto
 from typing import Iterable, Hashable, Optional, Callable, Sequence
 

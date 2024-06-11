@@ -1,6 +1,5 @@
 import pygame
 from typing import Callable, Any
-from queue import Queue, Empty
 
 
 class TimerManager:
@@ -32,8 +31,8 @@ class Timer:
         self.repeat = repeat
         self.start_time = 0
         self.active = False
-        self._start_hooks: Queue[Callable[..., Any]] = Queue()
-        self._end_hooks: Queue[Callable[..., Any]] = Queue()
+        self._start_hooks: list[Callable[..., Any]] = []
+        self._end_hooks: list[Callable[..., Any]] = []
         # Eine Queue hier könnte scheclt sein, falls der timer auf autostart ist. Queue habe ich nur genommen für FIFO (First in, First out). Sonst Liste Nehmen
 
         if autostart:
@@ -68,20 +67,16 @@ class Timer:
             self.deactivate()
 
     def add_start_hook(self, hook: Callable):
-        self._start_hooks.put(hook)
+        self._start_hooks.append(hook)
         # print("Added start hook:", hook.__name__)
 
     def add_end_hook(self, hook: Callable):
-        self._end_hooks.put(hook)
+        self._end_hooks.append(hook)
         # print("Added end hook:", hook.__name__)
 
-    def _execute_hooks(self, hooks: Queue[Callable[..., Any]]) -> None:
-        while not hooks.empty():
-            try:
-                hook = hooks.get_nowait()
-                hook()
-            except Empty:
-                pass
+    def _execute_hooks(self, hooks: list[Callable[..., Any]]) -> None:
+        for hook in hooks:
+            hook()
 
 
 def call_on_timer_start(timer: Timer):

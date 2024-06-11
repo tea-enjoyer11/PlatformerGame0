@@ -68,17 +68,23 @@ def cut_from_spritesheet(path_or_image: str | Surface, img_size: Vector2, pos: V
 
 
 class Animation:
+    __slots__ = ("states", "states_looping", "states_frame_time", "__state", "index")
+
     def __init__(self) -> None:
         self.states: dict[str, list[Surface]] = {}
         self.states_looping: dict[str, bool] = {}
+        self.states_frame_time: dict[str, bool] = {}
 
         self.__state: str = None
         self.index: float = 0.0
 
-    def add_state(self, state: str, surfs: list[Surface], looping: bool = True) -> None:
+    def add_state(self, state: str, surfs: list[Surface],
+                  looping: bool = True,
+                  frame_time: int = 4) -> None:
         if state not in self.states:
             self.states[state] = surfs
             self.states_looping[state] = looping
+            self.states_frame_time[state] = frame_time
 
     @property
     def state(self) -> str:
@@ -87,6 +93,7 @@ class Animation:
     @state.setter
     def state(self, state: str) -> None:
         self.__state = state
+        self.index = 0
 
     @property
     def over(self) -> bool:
@@ -94,7 +101,8 @@ class Animation:
             return False
         return self.index == len(self.states[self.__state]) - 1
 
-    def update(self, dt: float, change: float = 1.0) -> None:
+    def update(self, dt: float) -> None:
+        change = self.states_frame_time[self.__state]
         if self.states_looping[self.__state]:  # looping
             self.index = (self.index + change * dt) % len(self.states[self.__state])
         else:  # nicht looping

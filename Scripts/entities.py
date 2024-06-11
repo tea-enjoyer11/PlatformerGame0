@@ -13,7 +13,7 @@ class PhysicsEntity:
         self._last_pos = Vector2(0)
         self.size = size
         self.vel = Vector2(0)
-        self.rect = Rect(pos.x, pos.y, size.x, size.y)
+        self.rect = FRect(pos.x, pos.y, size.x, size.y)
         self.min_step_height = 22  # in TILESIZE Größe gerechnet
 
         self._collision_types = {'top': False, 'bottom': False, 'right': False, 'left': False}
@@ -41,11 +41,12 @@ class Player(PhysicsEntity):
         self.animation = Animation()
         path = "assets/entities/AnimationSheet_Character.png"
         s = Vector2(32)
-        self.animation.add_state("idle", cut_spritesheet_row(path, s, 0))
-        self.animation.add_state("walk", cut_spritesheet_row(path, s, 2))
-        self.animation.add_state("run", cut_spritesheet_row(path, s, 3))
-        self.animation.add_state("jump_init", cut_spritesheet_row(path, s, 5, max_frames=4), looping=False)
-        self.animation.add_state("jump_fall", cut_spritesheet_row(path, s, 5, max_frames=2, starting_frame=5), looping=False)
+        self.animation.add_state("idle", cut_spritesheet_row(path, s, 0), frame_time=3)
+        self.animation.add_state("idle_alt", cut_spritesheet_row(path, s, 1), frame_time=3)
+        self.animation.add_state("walk", cut_spritesheet_row(path, s, 2), frame_time=6)
+        self.animation.add_state("run", cut_spritesheet_row(path, s, 3), frame_time=12)
+        self.animation.add_state("jump_init", cut_spritesheet_row(path, s, 5, max_frames=4), looping=False, frame_time=12)
+        self.animation.add_state("jump_fall", cut_spritesheet_row(path, s, 5, max_frames=2, starting_frame=5), looping=False, frame_time=12)
 
         self.animation.state = "idle"
 
@@ -245,13 +246,13 @@ class Player(PhysicsEntity):
         return self.collision_types.copy()
 
     def update(self, dt: float) -> None:
-        self.animation.update(dt, change=10)
+        self.animation.update(dt)
 
         # if abs(self.vel.y) > 5:
         #     self.set_state("jump_max")
 
-        if self.collision_types["bottom"]:
-            self.set_state("jump_fall")
+        if self.collision_types["bottom"] and self.get_state() != "idle":
+            self.set_state("idle")
 
         print(self.animation.over, self.animation.state)
 
