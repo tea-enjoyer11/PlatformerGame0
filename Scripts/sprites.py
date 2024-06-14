@@ -68,7 +68,7 @@ def cut_from_spritesheet(path_or_image: str | Surface, img_size: Vector2, pos: V
 
 
 class Animation:
-    __slots__ = ("states", "states_looping", "states_frame_time", "__state", "index")
+    __slots__ = ("states", "states_looping", "states_frame_time", "__state", "index", "__last_img")
 
     def __init__(self) -> None:
         self.states: dict[str, list[Surface]] = {}
@@ -77,6 +77,7 @@ class Animation:
 
         self.__state: str = None
         self.index: float = 0.0
+        self.__last_img: Surface = None
 
     def add_state(self, state: str, surfs: list[Surface],
                   looping: bool = True,
@@ -102,6 +103,7 @@ class Animation:
         return self.index == len(self.states[self.__state]) - 1
 
     def update(self, dt: float) -> None:
+        self.__last_img = self.img()
         change = self.states_frame_time[self.__state]
         if self.states_looping[self.__state]:  # looping
             self.index = (self.index + change * dt) % len(self.states[self.__state])
@@ -110,3 +112,6 @@ class Animation:
 
     def img(self) -> Surface:
         return self.states[self.__state][int(self.index)]
+
+    def new_img(self) -> bool:
+        return self.__last_img == self.img()

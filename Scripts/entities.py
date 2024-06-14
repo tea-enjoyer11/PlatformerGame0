@@ -50,6 +50,8 @@ class Player(PhysicsEntity):
 
         self.animation.state = "idle"
 
+        self.mask = from_surface(self.animation.img())  # falls ich überhaupt diese Maske haben will, sonst weg damit!
+
     def _handle_standart_colls(self, movement, dt: float, normal_tiles: list[Tile]) -> None:
         self.pos[0] += movement[0] * dt
         self.rect.x = int(self.pos[0])
@@ -254,7 +256,10 @@ class Player(PhysicsEntity):
         if self.collision_types["bottom"] and self.get_state() != "idle":
             self.set_state("idle")
 
-        print(self.animation.over, self.animation.state)
+        if self.animation.new_img():  # TODO
+            self.mask = from_surface(self.animation.img())
+
+        # print(self.animation.over, self.animation.state)
 
     def set_state(self, state: str) -> None:
         self.animation.state = state
@@ -267,3 +272,5 @@ class Player(PhysicsEntity):
         if img:
             image_offset = Vector2(8, 0)
             surface.blit(img, Vector2(self.rect.topleft) - offset - image_offset)
+
+        surface.blit(self.mask.to_surface(), (250, 250))

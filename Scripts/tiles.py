@@ -129,6 +129,23 @@ class CustomTile(Tile):
                 ret[x] = TILESIZE - v + t
         self.height_data = ret
 
+        """
+        Custom data rewrite:
+        
+        Problem: Ich weiß nicht wie ich collision detection
+        zwischen einem Rect und einem custom tile machen soll...
+        
+        Lösungsidee:
+        ich benutze ein 2d array (später ein numpy.array),
+        um eine Maske des tiles zu speichern.
+        Dann kann ich pixel eine Maske für den Spieler erstellen ("Rect Maske")
+        und mask.overlap(..., ...) benutzen
+        
+        Mögliches Problem: das gibt mir nicht alle Punkte, sondern nur einen Punkt.
+        Dieser könnte komplett falsch sein...
+
+        """
+
     def remove_pixel(self, pos: Vector2) -> None:
         # pos_ = pos // TILESIZE
         # pixel_pos = pos_ // TILESIZE
