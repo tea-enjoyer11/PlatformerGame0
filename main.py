@@ -6,7 +6,7 @@ import pygame
 
 from Scripts.tiles import *
 from Scripts.CONFIG import *
-from Scripts.utils import load_image, draw_text
+from Scripts.utils import load_image, draw_text, random_color
 from Scripts.particles import ParticleGroup, ImageCache, CircleParticle, LeafParticle
 from Scripts.entities import Player
 from Scripts.timer import TimerManager
@@ -143,6 +143,12 @@ while run:
 
     tile_map.render(screen, p.pos, offset=scroll)
     pygame.draw.rect(screen, "blue", Rect(Vector2(p.rect.topleft) - scroll, p.rect.size))
+    for t in tile_map.get_all():
+        if t.type == TileType.TILE_CUSTOM:
+            for greedy_r in t.greedy_rects:
+                r = Rect(greedy_r.x - scroll.x, greedy_r.y - scroll.y, greedy_r.w, greedy_r.h)
+                pygame.draw.rect(screen, random_color(), r)
+
     p.render(screen, scroll)
 
     for tile in close_tiles:

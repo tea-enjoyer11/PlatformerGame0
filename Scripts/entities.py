@@ -13,7 +13,7 @@ class PhysicsEntity:
         self._last_pos = Vector2(0)
         self.size = size
         self.vel = Vector2(0)
-        self.rect = FRect(pos.x, pos.y, size.x, size.y)
+        self.rect = Rect(pos.x, pos.y, size.x, size.y)
         self.min_step_height = 22  # in TILESIZE Größe gerechnet
 
         self._collision_types = {'top': False, 'bottom': False, 'right': False, 'left': False}
@@ -175,7 +175,7 @@ class Player(PhysicsEntity):
                         self.pos[1] = self.rect.y
                         self.collision_types['bottom'] = True
 
-    def _handle_custom_tiles_colls(self, movement, dt: float, custom_tiles: list[CustomTile]) -> None:
+    def _handle_custom_tiles_colls2(self, movement, dt: float, custom_tiles: list[CustomTile]) -> None:
         for c_tile in custom_tiles:
             hitbox = tile_rect(c_tile)
             tile_collision = self.rect.colliderect(hitbox)
@@ -212,6 +212,39 @@ class Player(PhysicsEntity):
 
                         self.pos[1] = self.rect.y
                         self.collision_types['bottom'] = True
+
+    def _handle_custom_tiles_colls(self, movement, dt: float, custom_tiles: list[CustomTile]) -> None:
+        for c_tile in custom_tiles:
+            hitbox = tile_rect(c_tile)
+            tile_collision = self.rect.colliderect(hitbox)
+
+            if tile_collision:
+                c_tile_greedy_rects = c_tile.greedy_rects
+
+                self.pos[0] += movement[0] * dt
+                self.rect.x = int(self.pos[0])
+                tile_hit_list = collision_test(self.rect, c_tile_greedy_rects)
+
+                for t in tile_hit_list:
+                    if movement[0] > 0:
+                        self.rect.right = t.left
+                        self.collision_types['right'] = True
+                    elif movement[0] < 0:
+                        self.rect.left = t.right
+                        self.collision_types['left'] = True
+                    self.pos[0] = self.rect.x
+
+                self.pos[1] += movement[1] * dt
+                self.rect.y = int(self.pos[1])
+                tile_hit_list = collision_test(self.rect, c_tile_greedy_rects)
+                for t in tile_hit_list:
+                    if movement[1] > 0:
+                        self.rect.bottom = t.top
+                        self.collision_types['bottom'] = True
+                    elif movement[1] < 0:
+                        self.rect.top = t.bottom
+                        self.collision_types['top'] = True
+                    self.pos[1] = self.rect.y
 
     def move(self, movement: Sequence[float], tiles: list[Tile], dt: float, noclip: bool = False):
         self._last_pos = self.pos.copy()

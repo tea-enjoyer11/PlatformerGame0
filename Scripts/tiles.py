@@ -79,7 +79,8 @@ class Tile:
 
 
 class CustomTile(Tile):
-    __slots__ = ("pixel_data", "_pre_renderd_surf", "_last_pre_render_pixel_data", "height_data")
+    __slots__ = ("pixel_data", "_pre_renderd_surf", "_last_pre_render_pixel_data",
+                 "height_data", "greedy_rects")
 
     def __init__(self, pos: Vector2, tile_type: TileType = TileType.TILE_CUSTOM) -> None:
         super().__init__(pos, tile_type)
@@ -87,20 +88,21 @@ class CustomTile(Tile):
         self.pixel_data: dict[tuple, str] = {}
         for y in range(TILESIZE):
             for x in range(TILESIZE):
-                self.pixel_data[(x, y)] = "black"
+                self.pixel_data[(x, y)] = (0, 0, 0)
 
         self._pre_renderd_surf: Surface = None
         self._last_pre_render_pixel_data: dict[tuple, str] = {}
 
         self.height_data: dict[int, int] = {}
+        self.greedy_rects: list[Rect] = []
 
     def add_pixel(self, pos: Vector2) -> None:
         # pos_ = pos // TILESIZE
         # pixel_pos = pos_ // TILESIZE
         # print(pos, pos_, pixel_pos)
-        # self.pixel_data[tuple(pixel_pos)] = "white"
+        # self.pixel_data[tuple(pixel_pos)] = (255, 255, 255)
         self._last_pre_render_pixel_data = deepcopy(self.pixel_data)
-        self.pixel_data[tuple(pos)] = "white"
+        self.pixel_data[tuple(pos)] = (255, 255, 255)
         # print(pos)
 
     def extend_pixels(self, data: list[tuple], color: tuple = (255, 255, 255)) -> None:
@@ -108,7 +110,7 @@ class CustomTile(Tile):
         for pos in data:
             self.pixel_data[tuple(pos)] = color
 
-    def _calc_heigh_data(self) -> None:
+    def _calc_heigh_data2(self) -> None:
         ret: dict[int, int] = {}
 
         for x in range(TILESIZE):
@@ -146,6 +148,43 @@ class CustomTile(Tile):
 
         """
 
+    def _calc_heigh_data(self) -> None:
+        ret: list[Rect] = []
+        height = self.size[0]
+        width = self.size[1]
+        visited = [[False] * width for _ in range(height)]
+
+        for y in range(height):
+            for x in range(width):
+                # if mask[y][x] == 1 and not visited[y][x]:
+                if self.pixel_data[(x, y)] == (255, 255, 255) and not visited[x][y]:
+                    # Find the width of the rectangle
+                    rect_width = 0
+                    # while x + rect_width < width and mask[y][x + rect_width] == 1 and not visited[y][x + rect_width]:
+                    while x + rect_width < width and self.pixel_data[(x + rect_width, y)] == (255, 255, 255) and not visited[x + rect_width][y]:
+                        rect_width += 1
+
+                    # Find the height of the rectangle
+                    rect_height = 0
+                    done = False
+                    while y + rect_height < height and not done:
+                        for k in range(rect_width):
+                            # if mask[y + rect_height][x + k] == 0 or visited[y + rect_height][x + k]:
+                            if self.pixel_data[(x + k, y + rect_height)] != (255, 255, 255) or visited[x + k][y + rect_height]:
+                                done = True
+                                break
+                        if not done:
+                            rect_height += 1
+
+                    # Mark the visited cells
+                    for dy in range(rect_height):
+                        for dx in range(rect_width):
+                            visited[x + dx][y + dy] = True
+
+                    # Add the rectangle to the list
+                    ret.append(Rect(self.pos.x * TILESIZE + x, self.pos.y * TILESIZE + y, rect_width, rect_height))
+        self.greedy_rects = ret
+
     def remove_pixel(self, pos: Vector2) -> None:
         # pos_ = pos // TILESIZE
         # pixel_pos = pos_ // TILESIZE
@@ -153,7 +192,7 @@ class CustomTile(Tile):
         #    del self.pixel_data[tuple(pixel_pos)]
         if tuple(pos) in self.pixel_data:
             self._last_pre_render_pixel_data = deepcopy(self.pixel_data)
-            del self.pixel_data[tuple(pos)]
+            self.pixel_data[tuple(pos)] = (0, 0, 0)
 
     def pre_render_needed(self) -> bool:
         h1 = hash(frozenset(self._last_pre_render_pixel_data.items()))
