@@ -219,32 +219,37 @@ class Player(PhysicsEntity):
             tile_collision = self.rect.colliderect(hitbox)
 
             if tile_collision:
-                c_tile_greedy_rects = c_tile.greedy_rects
+                rel_x = self.rect.x - hitbox.x
 
-                self.pos[0] += movement[0] * dt
-                self.rect.x = int(self.pos[0])
-                tile_hit_list = collision_test(self.rect, c_tile_greedy_rects)
+                rel_x = max(1, min(rel_x, c_tile.size[0]))  # sonst gibt es fehler
+                tile_height = CUSTOM_TILES_DATA[c_tile.height_data_idx][rel_x - 1]  # mit height und unterschied zur current height kann man min_step_height einbauen
 
-                for t in tile_hit_list:
-                    if movement[0] > 0:
-                        self.rect.right = t.left
-                        self.collision_types['right'] = True
-                    elif movement[0] < 0:
-                        self.rect.left = t.right
+                steppable = self._is_steppable_custom_tile(c_tile, tile_height)
+
+                if not steppable:
+                    border_collision_threshold = 5
+                    rel_x_border = self.rect.x - (hitbox.x + TILESIZE)  # wie nah ist der Spieler an der Kante?
+                    if movement[0] < 0 and (0 < abs(rel_x_border) <= border_collision_threshold) and not steppable:
+                        tile_height = 0
+                        self.rect.left = hitbox.right
                         self.collision_types['left'] = True
-                    self.pos[0] = self.rect.x
+                        self.pos[0] = self.rect.x
+                    elif self.rect.x < hitbox.x:
+                        rel_x_border = self.rect.x - hitbox.x + self.rect.width
+                        if movement[0] > 0 and (0 < abs(rel_x_border) <= border_collision_threshold) and not steppable:
+                            tile_height = 0
+                            self.rect.right = hitbox.left
+                            self.collision_types['right'] = True
+                            self.pos[0] = self.rect.x
 
-                self.pos[1] += movement[1] * dt
-                self.rect.y = int(self.pos[1])
-                tile_hit_list = collision_test(self.rect, c_tile_greedy_rects)
-                for t in tile_hit_list:
-                    if movement[1] > 0:
-                        self.rect.bottom = t.top
+                if tile_height:
+                    adjust_height = TILESIZE + (c_tile.size[1] - TILESIZE)
+                    target_y = hitbox.y + adjust_height - tile_height
+                    if self.rect.bottom > target_y:
+                        self.rect.bottom = target_y
+
+                        self.pos[1] = self.rect.y
                         self.collision_types['bottom'] = True
-                    elif movement[1] < 0:
-                        self.rect.top = t.bottom
-                        self.collision_types['top'] = True
-                    self.pos[1] = self.rect.y
 
     def move(self, movement: Sequence[float], tiles: list[Tile], dt: float, noclip: bool = False):
         self._last_pos = self.pos.copy()

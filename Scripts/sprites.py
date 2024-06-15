@@ -43,7 +43,7 @@ def cut_spritesheet_row(path_or_image: str | Surface, img_size: Vector2, row_ind
         x += starting_frame
         if x > max_x:
             break
-        print(Rect(x * img_size.x, row_index * img_size.y, img_size.x, img_size.y))
+        # print(Rect(x * img_size.x, row_index * img_size.y, img_size.x, img_size.y))
         img = sheet.subsurface(Rect(x * img_size.x, row_index * img_size.y, img_size.x, img_size.y))
         i += 1
         if not surf_is_black(img):
@@ -68,7 +68,8 @@ def cut_from_spritesheet(path_or_image: str | Surface, img_size: Vector2, pos: V
 
 
 class Animation:
-    __slots__ = ("states", "states_looping", "states_frame_time", "__state", "index", "__last_img")
+    __slots__ = ("states", "states_looping", "states_frame_time",
+                 "__state", "index", "__last_img")
 
     def __init__(self) -> None:
         self.states: dict[str, list[Surface]] = {}

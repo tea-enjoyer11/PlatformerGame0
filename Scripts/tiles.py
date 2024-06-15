@@ -1,10 +1,8 @@
-from pprint import pprint
 from copy import deepcopy
 from itertools import chain
 import os
 from Scripts.CONFIG import *
-from Scripts.CONFIG import Vector2
-from typing import Literal
+from typing import Literal, Any
 
 
 class Queue:
@@ -69,147 +67,19 @@ class Tile:
         self.size = (TILESIZE, TILESIZE)
         self.img_idx = 0
 
-    def serialize(self):  # TODO funktion mal schreiben!
-        s = save_compressed_pickle(self)
-        ss = save_pickle(self)
-        print(len(s), len(ss))
-
     def __repr__(self) -> str:
         return f"<{self.pos=}, {self.type=}, {self.img_idx=}>"
 
 
 class CustomTile(Tile):
-    __slots__ = ("pixel_data", "_pre_renderd_surf", "_last_pre_render_pixel_data",
-                 "height_data", "greedy_rects")
+    __slots__ = ("height_data_idx", )
 
-    def __init__(self, pos: Vector2, tile_type: TileType = TileType.TILE_CUSTOM) -> None:
+    def __init__(self, pos: Vector2, height_data_idx: Any, img_idx: Any,
+                 tile_type: TileType = TileType.TILE_CUSTOM) -> None:
         super().__init__(pos, tile_type)
 
-        self.pixel_data: dict[tuple, str] = {}
-        for y in range(TILESIZE):
-            for x in range(TILESIZE):
-                self.pixel_data[(x, y)] = (0, 0, 0)
-
-        self._pre_renderd_surf: Surface = None
-        self._last_pre_render_pixel_data: dict[tuple, str] = {}
-
-        self.height_data: dict[int, int] = {}
-        self.greedy_rects: list[Rect] = []
-
-    def add_pixel(self, pos: Vector2) -> None:
-        # pos_ = pos // TILESIZE
-        # pixel_pos = pos_ // TILESIZE
-        # print(pos, pos_, pixel_pos)
-        # self.pixel_data[tuple(pixel_pos)] = (255, 255, 255)
-        self._last_pre_render_pixel_data = deepcopy(self.pixel_data)
-        self.pixel_data[tuple(pos)] = (255, 255, 255)
-        # print(pos)
-
-    def extend_pixels(self, data: list[tuple], color: tuple = (255, 255, 255)) -> None:
-        self._last_pre_render_pixel_data = deepcopy(self.pixel_data)
-        for pos in data:
-            self.pixel_data[tuple(pos)] = color
-
-    def _calc_heigh_data2(self) -> None:
-        ret: dict[int, int] = {}
-
-        for x in range(TILESIZE):
-            v = 0
-            t = 0  # thickness
-            for y in range(TILESIZE):
-                pos = (x, y)
-                if pos in self.pixel_data:
-                    c = self.pixel_data[pos]
-                    if c == "black":
-                        continue
-                    else:
-                        v = y
-                        t += 1
-            if t == 0:
-                ret[x] = 0
-            else:
-                ret[x] = TILESIZE - v + t
-        self.height_data = ret
-
-        """
-        Custom data rewrite:
-        
-        Problem: Ich weiß nicht wie ich collision detection
-        zwischen einem Rect und einem custom tile machen soll...
-        
-        Lösungsidee:
-        ich benutze ein 2d array (später ein numpy.array),
-        um eine Maske des tiles zu speichern.
-        Dann kann ich pixel eine Maske für den Spieler erstellen ("Rect Maske")
-        und mask.overlap(..., ...) benutzen
-        
-        Mögliches Problem: das gibt mir nicht alle Punkte, sondern nur einen Punkt.
-        Dieser könnte komplett falsch sein...
-
-        """
-
-    def _calc_heigh_data(self) -> None:
-        ret: list[Rect] = []
-        height = self.size[0]
-        width = self.size[1]
-        visited = [[False] * width for _ in range(height)]
-
-        for y in range(height):
-            for x in range(width):
-                # if mask[y][x] == 1 and not visited[y][x]:
-                if self.pixel_data[(x, y)] == (255, 255, 255) and not visited[x][y]:
-                    # Find the width of the rectangle
-                    rect_width = 0
-                    # while x + rect_width < width and mask[y][x + rect_width] == 1 and not visited[y][x + rect_width]:
-                    while x + rect_width < width and self.pixel_data[(x + rect_width, y)] == (255, 255, 255) and not visited[x + rect_width][y]:
-                        rect_width += 1
-
-                    # Find the height of the rectangle
-                    rect_height = 0
-                    done = False
-                    while y + rect_height < height and not done:
-                        for k in range(rect_width):
-                            # if mask[y + rect_height][x + k] == 0 or visited[y + rect_height][x + k]:
-                            if self.pixel_data[(x + k, y + rect_height)] != (255, 255, 255) or visited[x + k][y + rect_height]:
-                                done = True
-                                break
-                        if not done:
-                            rect_height += 1
-
-                    # Mark the visited cells
-                    for dy in range(rect_height):
-                        for dx in range(rect_width):
-                            visited[x + dx][y + dy] = True
-
-                    # Add the rectangle to the list
-                    ret.append(Rect(self.pos.x * TILESIZE + x, self.pos.y * TILESIZE + y, rect_width, rect_height))
-        self.greedy_rects = ret
-
-    def remove_pixel(self, pos: Vector2) -> None:
-        # pos_ = pos // TILESIZE
-        # pixel_pos = pos_ // TILESIZE
-        # if tuple(pixel_pos) in self.pixel_data:
-        #    del self.pixel_data[tuple(pixel_pos)]
-        if tuple(pos) in self.pixel_data:
-            self._last_pre_render_pixel_data = deepcopy(self.pixel_data)
-            self.pixel_data[tuple(pos)] = (0, 0, 0)
-
-    def pre_render_needed(self) -> bool:
-        h1 = hash(frozenset(self._last_pre_render_pixel_data.items()))
-        h2 = hash(frozenset(self.pixel_data.items()))
-        return not h1 == h2
-
-    def pre_render(self, force_pre_render: bool = False) -> None:
-        if self.pre_render_needed() or force_pre_render:
-            self._pre_renderd_surf = Surface((TILESIZE, TILESIZE))
-            for val, col in self.pixel_data.items():
-                self._pre_renderd_surf.set_at(val, col)
-            self._pre_renderd_surf.set_colorkey((0, 0, 0))
-
-            self._calc_heigh_data()
-
-    def get_pre_render(self) -> Surface:
-        return self._pre_renderd_surf
+        self.height_data_idx: Any = height_data_idx
+        self.img_idx = img_idx
 
 
 class Ramp(Tile):
@@ -385,75 +255,6 @@ class Chunk:
         self._pre_render_data = self._calc_pre_render_data()
         return ret
 
-    def add_pixel(self, tile_pos: Vector2, pixel_pos: Vector2) -> None:
-        self._last_pre_render_data = self._calc_pre_render_data()
-        pos = tuple(tile_pos)
-        pos = (pos[0] % CHUNKSIZE, pos[1] % CHUNKSIZE)
-        custom_tile: CustomTile = None
-        if pos in self._tiles:
-            if isinstance(self._tiles[pos], CustomTile):
-                custom_tile = self._tiles[pos]
-            else:
-                custom_tile = CustomTile(tile_pos)
-                self._tiles[pos] = custom_tile
-        else:
-            custom_tile = CustomTile(tile_pos)
-            self._tiles[pos] = custom_tile
-        custom_tile.add_pixel(pixel_pos)
-        custom_tile.pre_render()
-        self._pre_render_data = self._calc_pre_render_data()
-
-    def extend_pixels(self, data: list[Vector2], start_tile_pos: Vector2, start_pixel_pos: Vector2, color: tuple = (255, 255, 255)) -> None:
-        self._last_pre_render_data = self._calc_pre_render_data()
-        # start_pixel_pos = Vector2(start_pixel_pos.x % CHUNKSIZE, start_pixel_pos.y % CHUNKSIZE)
-        buffer1: dict[tuple, list[tuple]] = {tuple(start_tile_pos): []}
-        buffer2: dict[tuple, dict[tuple, list[tuple]]] = {}
-
-        SHIFTING_SIZE = TILESIZE - 1
-        for offset_pixel in data:
-            tile_pos = start_tile_pos.copy()
-            pixel_pos = start_pixel_pos + offset_pixel
-
-            # TODO: die überlappenden pixel an chunkbordern fixen!
-            # vllt chunksize varaible noch einbauen.
-            if pixel_pos.x < 0:
-                tile_pos.x -= 1
-                pixel_pos.x += SHIFTING_SIZE
-            elif pixel_pos.x > TILESIZE - 1:
-                tile_pos.x += 1
-                pixel_pos.x -= SHIFTING_SIZE
-            if pixel_pos.y < 0:
-                tile_pos.y -= 1
-                pixel_pos.y += SHIFTING_SIZE
-            elif pixel_pos.y > TILESIZE - 1:
-                tile_pos.y += 1
-                pixel_pos.y -= SHIFTING_SIZE
-
-            tile_pos = tuple(tile_pos)
-            if tile_pos not in buffer1:
-                buffer1[tile_pos] = []
-            buffer1[tile_pos].append(tuple(pixel_pos))
-
-        # print(list(buffer.keys()))  # global tile pos
-        # print([(pos[0] % CHUNKSIZE, pos[1] % CHUNKSIZE) for pos in buffer])  # tile pos in chunk
-
-        for pos, data_ in buffer1.items():
-            local_pos = (pos[0] % CHUNKSIZE, pos[1] % CHUNKSIZE)
-            custom_tile: CustomTile = None
-            if local_pos in self._tiles:
-                if isinstance(self._tiles[local_pos], CustomTile):
-                    custom_tile = self._tiles[local_pos]
-                else:
-                    custom_tile = CustomTile(pos)
-                    self._tiles[local_pos] = custom_tile
-            else:
-                custom_tile = CustomTile(pos)
-                self._tiles[local_pos] = custom_tile
-            custom_tile.extend_pixels(data_, color=color)
-            custom_tile.pre_render(force_pre_render=True)
-
-        self._pre_render_data = self._calc_pre_render_data()
-
     def extend(self, tiles: list[Tile]) -> None:
         self._last_pre_render_data = self._calc_pre_render_data()
         for tile in tiles:
@@ -462,7 +263,7 @@ class Chunk:
             self._tiles[pos] = tile
         self._pre_render_data = self._calc_pre_render_data()
 
-    def _calc_pre_render_data(self) -> None:
+    def _calc_pre_render_data(self) -> list[Iterable]:
         return list(chain(self._tiles.items(), self._ghost_tiles.items()))
 
     def pre_render_needed(self) -> bool:
@@ -511,7 +312,6 @@ class Chunk:
         l = []
         global_tile_offset = Vector2(0)
 
-        # ! Smart approach
         ramps: list[Ramp] = []
         custom_ramps: list[CustomRamp] = []
         tiles: list[Tile] = []
@@ -550,8 +350,8 @@ class Chunk:
         for c_tile in custom_tiles:
             local_pos = (c_tile.pos.x % CHUNKSIZE, c_tile.pos.y % CHUNKSIZE)
             local_pos = (local_pos[0] * TILESIZE, local_pos[1] * TILESIZE + global_tile_offset.y)
-            l.append((c_tile.get_pre_render(), local_pos))
-            # print(c_tile.get_pre_render(), c_tile.pre_render_needed())
+            l.append((IMGS[c_tile.img_idx], local_pos))
+            # print(IMGS[c_tile.img_idx])
 
         for c_ramp in custom_ramps:
             local_pos = (c_ramp.pos.x % CHUNKSIZE, c_ramp.pos.y % CHUNKSIZE)
@@ -559,14 +359,6 @@ class Chunk:
             local_pos = (local_pos[0] * TILESIZE, local_pos[1] * TILESIZE + global_tile_offset.y - offset_y)
             l.append((IMGS[c_ramp.img_idx], local_pos))
             # print(local_pos)
-
-        # ! Naive approach
-        # for local_pos, tile in self._tiles.items():
-        #     offset = 0
-        #     if tile.type in [TileType.RAMP_LEFT, TileType.RAMP_RIGHT]:
-        #         offset = TILESIZE * tile.elevation - TILESIZE
-        #     local_pos = (local_pos[0] * TILESIZE, local_pos[1] * TILESIZE - offset)
-        #     l.append((IMGS[tile.img_idx], local_pos))
 
         w, h = self.size[0] * TILESIZE, self.size[1] * TILESIZE
         surf = Surface((w + global_tile_offset.x, h + global_tile_offset.y))
@@ -623,15 +415,15 @@ class TileMap:
         # self._tiles: dict[tuple, Tile] = {}
         self._chunks: dict[tuple, Chunk] = {}
 
-        self.chunk_size = chunk_size
+        self.chunk_size: tuple[int, int] = chunk_size
 
         self.amount_of_tiles = 0
         self.amount_of_chunks = 0
         self._pre_render_queue: Queue[Chunk] = Queue()
 
         self.culling_offset = Vector2(
-            RES.x // TILESIZE / 4,
-            RES.y // TILESIZE / 4
+            RES.x // TILESIZE / 5,
+            RES.y // TILESIZE / 5
         )
 
     def pre_render_chunks(self) -> None:
@@ -677,26 +469,6 @@ class TileMap:
             self.amount_of_tiles += 1
             self.add_to_pre_render_queue(chunk)
 
-    def add_pixel(self, tile_pos: Vector2, pixel_pos: Vector2) -> None:
-        related_chunk_pos = (tile_pos.x // self.chunk_size[0], tile_pos.y // self.chunk_size[1])
-
-        if related_chunk_pos not in self._chunks:
-            self._chunks[related_chunk_pos] = Chunk(self, related_chunk_pos, size=self.chunk_size)
-
-        chunk = self._chunks[related_chunk_pos]
-        chunk.add_pixel(tile_pos, pixel_pos)
-        self.add_to_pre_render_queue(chunk)
-
-    def extend_pixels(self, data: list[Vector2], start_tile_pos: Vector2, start_pixel_pos: Vector2, color: tuple = (255, 255, 255)) -> None:
-        related_chunk_pos = (start_tile_pos.x // self.chunk_size[0], start_tile_pos.y // self.chunk_size[1])
-
-        if related_chunk_pos not in self._chunks:
-            self._chunks[related_chunk_pos] = Chunk(self, related_chunk_pos, size=self.chunk_size)
-
-        chunk = self._chunks[related_chunk_pos]
-        chunk.extend_pixels(data, start_tile_pos, start_pixel_pos, color=color)
-        self.add_to_pre_render_queue(chunk)
-
     def extend(self, tiles: list[Tile]) -> None:
         for tile in tiles:
             # self._tiles[tuple(tile.pos)] = tile
@@ -740,7 +512,6 @@ class TileMap:
         # print("related chunk position:", related_chunk_pos, pos)
         ret = []
 
-        # ! New approach
         pos_on_edge = on_edge_of_chunk(pos)
 
         processed_chunks = set()  # to keep track of processed chunks
@@ -757,14 +528,6 @@ class TileMap:
                         ret += self._chunks[rel_chunk].get_around(pos)
                     processed_chunks.add(rel_chunk)  # Mark chunk as processed
 
-        # ! Old approach
-        # for offset in NEIGHBOR_OFFSETS:
-        #     chunk_pos = related_chunk_pos + offset
-        #     if tuple(chunk_pos) in self._chunks:
-        #         # print(chunk_pos, "is in check radius")
-        #         tiles = self._chunks[tuple(chunk_pos)].get_all()
-        #         ret += tiles
-
         return ret
 
     def get_all(self) -> list[Tile]:
@@ -776,8 +539,15 @@ class TileMap:
     def render(self, surf: Surface, target_pos: Vector2, offset: Vector2 = Vector2(0)) -> None:
         target_pos = (target_pos[0] / TILESIZE // self.chunk_size[0], target_pos[1] / TILESIZE // self.chunk_size[1])
 
-        p1 = (int(target_pos[0] - self.culling_offset.x), int(target_pos[1] - self.culling_offset.y))
-        p2 = (int(target_pos[0] + self.culling_offset.x), int(target_pos[1] + self.culling_offset.y))
+        p1 = (
+            int(target_pos[0] - self.culling_offset.x),
+            int(target_pos[1] - self.culling_offset.y)
+        )
+        p2 = (
+            int(target_pos[0] + self.culling_offset.x),
+            int(target_pos[1] + self.culling_offset.y)
+        )
+        # print(p1, p2)
 
         l = []
         for y in range(p1[1], p2[1] + 1):
@@ -785,8 +555,6 @@ class TileMap:
                 if (x, y) in self._chunks:
                     l.append(self._chunks[(x, y)].get_pre_render(offset))
 
-        # TODO Bug fixen: chunk wird manchmal nicht richtig ge prerendert
-        # hängt wahrscheinlich alles mit dieser verdammten queue zusammen
         surf.fblits(l)
 
         for y in range(p1[1], p2[1] + 1):
@@ -808,6 +576,7 @@ class TileMap:
         tilemap = TileMap()
 
         files = [f for f in os.listdir(directory) if f.endswith(".data")]
+        print(files)
         for file_path in files:
             c: Chunk = None
             with open(f"{directory}/{file_path}", "rb") as f:
@@ -815,14 +584,8 @@ class TileMap:
                 c = load_compressed_pickle(data)
             if c:
                 c.parent = tilemap
-                custom_tiles = [t for _, t in c._tiles.items() if t.type == TileType.TILE_CUSTOM]
-                for c_tile in custom_tiles:
-                    c_tile.pre_render(force_pre_render=True)
-
-                for p, t in c._tiles.items():
-                    if t.type == TileType.TILE_CUSTOM:
-                        print(p, t.pos, p == tuple(t.pos))
             chunks[tuple(c.pos)] = c
+            # print(c._tiles)
         tilemap._chunks = chunks
         tilemap.pre_render_chunks()
         return tilemap
@@ -871,7 +634,7 @@ def render_collision_mesh(surf: Surface, color: Color, t: Tile | Ramp, width: in
             p1, p2 = r.bottomright, r.topleft
         pygame.draw.rect(surf, color, r, width)
         pygame.draw.line(surf, color, p1, p2, width)
-    else:  # isinstance(t, Tile)
+    else:  # isinstance(t, Tile) or isinstance(t, CustomTile)
         r = tile_rect(t, offset=offset)
         pygame.draw.rect(surf, color, r, width)
 
@@ -879,14 +642,11 @@ def render_collision_mesh(surf: Surface, color: Color, t: Tile | Ramp, width: in
 def serialize_chunk(chunk: Chunk, directory: str) -> None:
     chunk.__setattr__("_pre_renderd_surf", None)  # sonst Fehler, pickle kann pygame.Surface nicht bearbeiten
     chunk.__setattr__("parent", None)
-    tiles = chunk._tiles
-    custom_tiles = [t for _, t in tiles.items() if t.type == TileType.TILE_CUSTOM]
-    for c_tile in custom_tiles:
-        c_tile.__setattr__("_pre_renderd_surf", None)
 
-    for p, t in tiles.items():
-        if t.type == TileType.TILE_CUSTOM:
-            print(p, t.pos, p == tuple(t.pos))
+    # for p, t in chunk._tiles.items():
+    #     if t.type == TileType.TILE_CUSTOM:
+    #         print(p, t.pos, p == tuple(t.pos))
+
     data = save_compressed_pickle(chunk)
 
     file_name = f"{directory}/{str(tuple(chunk.pos))}.data"
