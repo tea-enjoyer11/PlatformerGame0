@@ -11,26 +11,7 @@ from Scripts.particles import ParticleGroup, ImageCache, CircleParticle, LeafPar
 from Scripts.entities import Player
 from Scripts.timer import TimerManager
 
-# generate test map
-# tiles: list[Ramp | Tile] = [Tile(Vector2(0, 0)), Ramp('red', Vector2(3, 8), TileType.RAMP_RIGHT), Ramp('red', Vector2(5, 8), TileType.RAMP_RIGHT), Ramp('red', Vector2(7, 8), TileType.RAMP_LEFT, 0.5), Tile('red', Vector2(6, 8)), Tile('red', Vector2(4, 6)), Ramp('red', Vector2(4, 5), TileType.RAMP_LEFT), Tile('red', Vector2(3, 5)), Tile(Vector2(11, 8)), Tile(Vector2(14, 8)), Tile(Vector2(14, 7))]
-tiles: list[Ramp | Tile] = [Ramp(Vector2(2, 8), TileType.RAMP_RIGHT, 1), Ramp(Vector2(4, 8), TileType.RAMP_LEFT, 1), Ramp(Vector2(6, 8), TileType.RAMP_RIGHT, 0.5), Ramp(Vector2(8, 8), TileType.RAMP_LEFT, 0.5), Ramp(Vector2(10, 8), TileType.RAMP_RIGHT, 2), Ramp(Vector2(12, 8), TileType.RAMP_LEFT, 2)]
-for i in range(16):
-    tiles.append(Tile(Vector2(i, 9)))
-# tiles = []
-for i in range(CHUNKSIZE):
-    tiles.append(Tile(Vector2(0, i)))
-tiles.append(CustomRamp(Vector2(-1, 9), load_image("assets/custom_ramp_hitbox.png"), TileType.RAMP_RIGHT, img_idx=3))
-tiles.append(CustomRamp(Vector2(-3, 9), load_image("assets/custom_ramp2_hitbox.png"), TileType.RAMP_LEFT, img_idx=4))
-tiles.append(CustomRamp(Vector2(-4, 9), load_image("assets/custom_ramp2_hitbox.png", flip_x=True), TileType.RAMP_RIGHT, img_idx=44))
-tiles.append(CustomRamp(Vector2(-7, 9), load_image("assets/custom_ramp3_hitbox.png"), TileType.RAMP_RIGHT, img_idx=5))
-tiles.append(CustomRamp(Vector2(-6, 9), load_image("assets/custom_ramp3_hitbox.png", flip_x=True), TileType.RAMP_LEFT, img_idx=55))
-tiles.append(CustomRamp(Vector2(-11, 9), load_image("assets/custom_ramp_hitbox.png"), TileType.RAMP_RIGHT, img_idx=3))
-tiles.append(CustomRamp(Vector2(-10, 9), load_image("assets/custom_ramp_hitbox.png", flip_x=True), TileType.RAMP_LEFT, img_idx=33))
-tiles.append(CustomRamp(Vector2(-13, 9), load_image("assets/custom_ramp3_hitbox.png", flip_x=True), TileType.RAMP_LEFT, img_idx=55))
-tiles.append(CustomRamp(Vector2(-15, 9), load_image("assets/custom_ramp3_hitbox.png"), TileType.RAMP_RIGHT, img_idx=5))
-for x in range(-24, 24):
-    for y in range(16):
-        tiles.append(Tile(Vector2(x, 10 + y)))
+
 p = Player(Vector2(200, 500))
 
 
@@ -49,13 +30,12 @@ noclip = False
 scroll = Vector2(0)
 pygame_gui_manager = pygame_gui.ui_manager.UIManager((800, 600))
 tile_map = TileMap()
-# tile_map.extend(tiles)
 tile_map = TileMap.deserialize("saves/t1")
 tile_map.pre_render_chunks()
 
 img_cache = ImageCache(load_image)
 particle_group = ParticleGroup(img_cache)
-# renderer = Renderer()
+
 
 # region Slider setup
 gravity_slider = pygame_gui.elements.UIHorizontalSlider(relative_rect=pygame.Rect(210, 500, 500, 30),
@@ -96,11 +76,10 @@ fps_options = [0, 15, 30, 60, 120, 240]
 fps_idx = 0
 run = True
 while run:
-    dt = mainClock.tick(fps_options[fps_idx]) * 0.001
-    dt *= dt_multiplicator
+    dt = mainClock.tick(fps_options[fps_idx]) * 0.001 * dt_multiplicator
 
     # self.scroll += ((self.player.pos - Vector2(4, 4)) - RES / 4 / 2 - self.scroll) / 30
-    scroll += ((p.pos - Vector2(TILESIZE / 2)) - RES / 2 - scroll) / 30
+    scroll += ((p.pos - Vector2(TILESIZE / 2)) - DOWNSCALED_RES / 2 - scroll) / 30
 
     # Background --------------------------------------------- #
     screen.fill((0, 0, 0))
@@ -144,16 +123,6 @@ while run:
 
     for tile in close_tiles:
         render_collision_mesh(screen, "yellow", tile, offset=scroll)
-
-    draw_text(screen, f"DT:{dt:.4f} DT multiplier:{dt_multiplicator:.4f}", (0, 80))
-    draw_text(screen, f"{mainClock.get_fps():.0f}", (500, 0))
-    draw_text(screen, f"{player_movement[0]:.2f}, {player_movement[1]:.2f}", (0, 200))
-    draw_text(screen, f"TILEPOS: {p.pos // TILESIZE}\nPOS:{p.pos}\nNOCLIP: {noclip}", (500, 50))
-    draw_text(screen, f"TILEMAP:\nAmount of Chunks: {len(tile_map._chunks)}\nAmount of Tiles: {tile_map.amount_of_tiles}", (500, 150))
-    draw_text(screen, f"PARTICLES:\nAmount of Particles: {len(particle_group)}", (500, 250))
-    draw_text(screen, f"{collisions}", (0, 0), font=font)
-    draw_text(screen, f"{p._last_collision_types}", (0, 20))
-    draw_text(screen, f"Are the last and current collisions the same: {collisions == p._last_collision_types}", (0, 40))
 
     # Buttons ------------------------------------------------ #
     for event in pygame.event.get():
@@ -257,10 +226,19 @@ while run:
     pygame_gui_manager.update(dt)
     pygame_gui_manager.draw_ui(screen)
 
-    # Update ------------------------------------------------- #
-    # renderer.render(screen)
-    # renderer.render_particles(particle_group.particles)
+    master_screen.blit(pygame.transform.scale(screen, RES), (0, 0))
+
+    draw_text(master_screen, f"DT: {dt:.6f} DT multiplier:{dt_multiplicator:.4f}", (0, 80))
+    draw_text(master_screen, f"{mainClock.get_fps():.0f}", (500, 0))
+    draw_text(master_screen, f"{player_movement[0]:.2f}, {player_movement[1]:.2f}", (0, 200))
+    draw_text(master_screen, f"TILEPOS: {p.pos // TILESIZE}\nPOS:{p.pos}\nNOCLIP: {noclip}", (500, 50))
+    draw_text(master_screen, f"TILEMAP:\nAmount of Chunks: {len(tile_map._chunks)}\nAmount of Tiles: {tile_map.amount_of_tiles}", (500, 150))
+    draw_text(master_screen, f"PARTICLES:\nAmount of Particles: {len(particle_group)}", (500, 250))
+    draw_text(master_screen, f"{collisions}", (0, 0), font=font)
+    draw_text(master_screen, f"{p._last_collision_types}", (0, 20))
+    draw_text(master_screen, f"Are the last and current collisions the same: {collisions == p._last_collision_types}", (0, 40))
+
     pygame.display.flip()
-# renderer.quit()
+
 pygame.quit()
 sys.exit()

@@ -58,14 +58,17 @@ class TileType(Enum):
 class Tile:
     __slots__ = ("pos", "type", "img_idx", "size")
 
-    def __init__(self, pos: Vector2, tile_type: TileType = TileType.TILE) -> None:
+    def __init__(self, pos: Vector2, tile_type: TileType = TileType.TILE, img_idx: Any = None) -> None:
         if not isinstance(pos, Vector2):
             pos = Vector2(pos)
         self.pos = pos
         self.type = tile_type
 
         self.size = (TILESIZE, TILESIZE)
+
         self.img_idx = 0
+        if img_idx:
+            self.img_idx = img_idx
 
     def __repr__(self) -> str:
         return f"<{self.pos=}, {self.type=}, {self.img_idx=}>"
@@ -576,7 +579,7 @@ class TileMap:
         tilemap = TileMap()
 
         files = [f for f in os.listdir(directory) if f.endswith(".data")]
-        print(files)
+        # print(files)
         for file_path in files:
             c: Chunk = None
             with open(f"{directory}/{file_path}", "rb") as f:

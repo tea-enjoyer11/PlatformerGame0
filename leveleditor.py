@@ -220,7 +220,10 @@ while run:
                 if mode == 0:
                     for position in get_positions():
                         idx = f"c_tile({selected_tile[1]};{selected_tile[0]})"
-                        t = CustomTile(position, idx, idx)
+                        if selected_tile not in [(14, 0), (14, 1), (14, 2), (15, 0), (15, 1), (15, 2), (16, 0), (16, 1), (16, 2)]:
+                            t = CustomTile(position, idx, idx)
+                        else:
+                            t = Tile(position, img_idx=f"TEST{idx}")
                         tilemap.add(t)
                     tilemap.pre_render_chunks()
                 elif mode == 1:
@@ -277,11 +280,11 @@ while run:
     #
     screen.fill((92, 95, 89))
     render_grid()
-    pygame.draw.rect(screen, (70, 0, 70), Rect(0, 0, left_menu_offset, RES.y))  # left ui panel background
     tilemap.render(screen, mPos + offset, offset=offset)  # TODO so was wie: culling_rect=Rect(left_menu_offset, 0, RES.x - left_menu_offset, RES.y) einbauen
     render_selected_tile()
 
     # display tiles & current tile
+    pygame.draw.rect(screen, (70, 0, 70), Rect(0, 0, left_menu_offset, RES.y))  # left ui panel background
     for y, row in enumerate(tiles):
         for x, surf in enumerate(row):
             p = Vector2(x * TILESIZE, y * TILESIZE)

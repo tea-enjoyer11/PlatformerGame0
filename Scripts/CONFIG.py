@@ -16,12 +16,14 @@ GROUND_FRICTION = 0.78
 AIR_FRICTION = 0.98
 
 RES = Vector2(800, 600)
-
+DOWNSACLE_FACTOR = 2
+DOWNSCALED_RES = RES / DOWNSACLE_FACTOR
 
 pygame.init()
 pygame.font.init()
 
-screen = pygame.display.set_mode(RES, 0, 32)
+master_screen = pygame.display.set_mode(RES, 0, 32)
+screen = Surface(DOWNSCALED_RES)
 mainClock = pygame.time.Clock()
 font = pygame.font.SysFont("arial", 21)
 
@@ -81,6 +83,16 @@ IMGS = {
     "grass5": load_image("assets/tiles/grass5.png"),
     "grass6": load_image("assets/tiles/grass6.png"),
 
+    "TEST": load_image("assets/tiles/stone/3.png"),
+    "TESTc_tile(1;14)": load_image("assets/test/0.png"),
+    "TESTc_tile(1;16)": load_image("assets/test/4.png"),
+    "TESTc_tile(2;14)": load_image("assets/test/1.png"),
+    "TESTc_tile(2;15)": load_image("assets/test/2.png"),
+    "TESTc_tile(2;16)": load_image("assets/test/3.png"),
+    "TESTc_tile(0;16)": load_image("assets/test/5.png"),
+    "TESTc_tile(0;15)": load_image("assets/test/6.png"),
+    "TESTc_tile(0;14)": load_image("assets/test/7.png"),
+    "TESTc_tile(1;15)": load_image("assets/test/8.png"),
 }
 
 

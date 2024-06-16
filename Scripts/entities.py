@@ -14,7 +14,7 @@ class PhysicsEntity:
         self.size = size
         self.vel = Vector2(0)
         self.rect = Rect(pos.x, pos.y, size.x, size.y)
-        self.min_step_height = 22  # in TILESIZE Größe gerechnet
+        self.min_step_height = 0.3  # in TILESIZE Größe gerechnet
 
         self._collision_types = {'top': False, 'bottom': False, 'right': False, 'left': False}
         self._last_collision_types = {'top': False, 'bottom': False, 'right': False, 'left': False}
@@ -30,8 +30,10 @@ class PhysicsEntity:
         return ramp.size.y <= self.min_step_height * TILESIZE
 
     def _is_steppable_custom_tile(self, c_tile: CustomTile, tile_height: float) -> bool:
-        steppable = (TILESIZE - tile_height) < self.min_step_height * TILESIZE
-        return steppable
+        # steppable = (TILESIZE - tile_height) < self.min_step_height * TILESIZE
+        diff = abs(self._last_pos.y - self.pos.y)
+        print(diff, diff * TILESIZE, TILESIZE * self.min_step_height, diff <= TILESIZE * self.min_step_height)
+        return diff <= TILESIZE * self.min_step_height
 
 
 class Player(PhysicsEntity):
@@ -59,25 +61,25 @@ class Player(PhysicsEntity):
         for t in tile_hit_list:
             if movement[0] > 0:
                 self.rect.right = t.left
-                self.collision_types['right'] = True
+                self._collision_types['right'] = True
             elif movement[0] < 0:
                 self.rect.left = t.right
-                self.collision_types['left'] = True
+                self._collision_types['left'] = True
             self.pos[0] = self.rect.x
-            if self._is_steppable(t):  # das funktioniert nur wenn man an der linken kannte des spielers steht, dann auch nur bis dtmultiplier 2.5, ab 3.0 gehts net mehr TODO: FIXEN
-                self.rect.bottom = t.top
-                self.collision_types['bottom'] = True
-                self.pos[1] = self.rect.y - 1  # kleiner offset, damit der Spieler nicht an der Kante stecken bleibt
+            # if self._is_steppable(t):  # das funktioniert nur wenn man an der linken kannte des spielers steht, dann auch nur bis dtmultiplier 2.5, ab 3.0 gehts net mehr TODO: FIXEN
+            #     self.rect.bottom = t.top
+            #     self._collision_types['bottom'] = True
+            #     self.pos[1] = self.rect.y - 1  # kleiner offset, damit der Spieler nicht an der Kante stecken bleibt
         self.pos[1] += movement[1] * dt
         self.rect.y = int(self.pos[1])
         tile_hit_list = collision_test(self.rect, normal_tiles)
         for t in tile_hit_list:
             if movement[1] > 0:
                 self.rect.bottom = t.top
-                self.collision_types['bottom'] = True
+                self._collision_types['bottom'] = True
             elif movement[1] < 0:
                 self.rect.top = t.bottom
-                self.collision_types['top'] = True
+                self._collision_types['top'] = True
             self.pos[1] = self.rect.y
 
     def _handle_ramps_colls(self, movement, dt: float, ramps: list[Ramp]) -> None:
@@ -105,7 +107,7 @@ class Player(PhysicsEntity):
                     if movement[0] < 0 and (0 < abs(rel_x_border) <= border_collision_threshold) and not steppable:
                         ramp_height = 0
                         self.rect.left = hitbox.right
-                        self.collision_types['left'] = True
+                        self._collision_types['left'] = True
                         self.pos[0] = self.rect.x
                 elif ramp.type == TileType.RAMP_LEFT:
                     ramp_height = (TILESIZE * ramp.elevation) - rel_x * ramp.elevation
@@ -115,7 +117,7 @@ class Player(PhysicsEntity):
                     if movement[0] > 0 and (0 < abs(rel_x_border) <= border_collision_threshold) and not steppable:
                         ramp_height = 0
                         self.rect.right = hitbox.left
-                        self.collision_types['right'] = True
+                        self._collision_types['right'] = True
                         self.pos[0] = self.rect.x
 
                 # constraints
@@ -132,7 +134,7 @@ class Player(PhysicsEntity):
                     self.rect.bottom = target_y
                     self.pos[1] = self.rect.y
 
-                    self.collision_types['bottom'] = True
+                    self._collision_types['bottom'] = True
 
     def _handle_custom_ramps_colls(self, movement, dt: float, ramps: list[CustomRamp]) -> None:
         for ramp in ramps:
@@ -155,7 +157,7 @@ class Player(PhysicsEntity):
                     if movement[0] < 0 and (0 < abs(rel_x_border) <= border_collision_threshold) and not steppable:
                         ramp_height = 0
                         self.rect.left = hitbox.right
-                        self.collision_types['left'] = True
+                        self._collision_types['left'] = True
                         self.pos[0] = self.rect.x
                 elif ramp.orientation == TileType.RAMP_LEFT:  # ! TODO bug beheben
                     rel_x_border = self.rect.x - hitbox.x + self.rect.width  # wie nah ist der Spieler an der Kante?
@@ -163,7 +165,7 @@ class Player(PhysicsEntity):
                     if movement[0] > 0 and (0 < abs(rel_x_border) <= border_collision_threshold) and not steppable:
                         ramp_height = 0
                         self.rect.right = hitbox.left
-                        self.collision_types['right'] = True
+                        self._collision_types['right'] = True
                         self.pos[0] = self.rect.x
 
                 if ramp_height:
@@ -173,45 +175,7 @@ class Player(PhysicsEntity):
                         self.rect.bottom = target_y
 
                         self.pos[1] = self.rect.y
-                        self.collision_types['bottom'] = True
-
-    def _handle_custom_tiles_colls2(self, movement, dt: float, custom_tiles: list[CustomTile]) -> None:
-        for c_tile in custom_tiles:
-            hitbox = tile_rect(c_tile)
-            tile_collision = self.rect.colliderect(hitbox)
-
-            if tile_collision:
-                rel_x = self.rect.x - hitbox.x
-
-                rel_x = max(1, min(rel_x, c_tile.size[0]))  # sonst gibt es fehler
-                tile_height = c_tile.height_data[rel_x - 1]  # mit height und unterschied zur current height kann man min_step_height einbauen
-
-                steppable = self._is_steppable_custom_tile(c_tile, tile_height)
-
-                if not steppable:
-                    border_collision_threshold = 5
-                    rel_x_border = self.rect.x - (hitbox.x + TILESIZE)  # wie nah ist der Spieler an der Kante?
-                    if movement[0] < 0 and (0 < abs(rel_x_border) <= border_collision_threshold) and not steppable:
-                        tile_height = 0
-                        self.rect.left = hitbox.right
-                        self.collision_types['left'] = True
-                        self.pos[0] = self.rect.x
-                    elif self.rect.x < hitbox.x:
-                        rel_x_border = self.rect.x - hitbox.x + self.rect.width
-                        if movement[0] > 0 and (0 < abs(rel_x_border) <= border_collision_threshold) and not steppable:
-                            tile_height = 0
-                            self.rect.right = hitbox.left
-                            self.collision_types['right'] = True
-                            self.pos[0] = self.rect.x
-
-                if tile_height:
-                    adjust_height = TILESIZE + (c_tile.size[1] - TILESIZE)
-                    target_y = hitbox.y + adjust_height - tile_height
-                    if self.rect.bottom > target_y:
-                        self.rect.bottom = target_y
-
-                        self.pos[1] = self.rect.y
-                        self.collision_types['bottom'] = True
+                        self._collision_types['bottom'] = True
 
     def _handle_custom_tiles_colls(self, movement, dt: float, custom_tiles: list[CustomTile]) -> None:
         for c_tile in custom_tiles:
@@ -229,32 +193,33 @@ class Player(PhysicsEntity):
                 if not steppable:
                     border_collision_threshold = 5
                     rel_x_border = self.rect.x - (hitbox.x + TILESIZE)  # wie nah ist der Spieler an der Kante?
-                    if movement[0] < 0 and (0 < abs(rel_x_border) <= border_collision_threshold) and not steppable:
+                    print(1111111, rel_x_border, border_collision_threshold)
+                    if movement[0] < 0 and (0 < abs(rel_x_border) <= border_collision_threshold):
                         tile_height = 0
                         self.rect.left = hitbox.right
-                        self.collision_types['left'] = True
+                        self._collision_types['left'] = True
                         self.pos[0] = self.rect.x
                     elif self.rect.x < hitbox.x:
                         rel_x_border = self.rect.x - hitbox.x + self.rect.width
-                        if movement[0] > 0 and (0 < abs(rel_x_border) <= border_collision_threshold) and not steppable:
+                        if movement[0] > 0 and (0 < abs(rel_x_border) <= border_collision_threshold):
                             tile_height = 0
                             self.rect.right = hitbox.left
-                            self.collision_types['right'] = True
+                            self._collision_types['right'] = True
                             self.pos[0] = self.rect.x
 
-                if tile_height:
-                    adjust_height = TILESIZE + (c_tile.size[1] - TILESIZE)
-                    target_y = hitbox.y + adjust_height - tile_height
-                    if self.rect.bottom > target_y:
-                        self.rect.bottom = target_y
+                # if tile_height:
+                adjust_height = TILESIZE + (c_tile.size[1] - TILESIZE)
+                target_y = hitbox.y + adjust_height - tile_height
+                if self.rect.bottom > target_y:
+                    self.rect.bottom = target_y
 
-                        self.pos[1] = self.rect.y
-                        self.collision_types['bottom'] = True
+                    self.pos[1] = self.rect.y
+                    self._collision_types['bottom'] = True
 
     def move(self, movement: Sequence[float], tiles: list[Tile], dt: float, noclip: bool = False):
         self._last_pos = self.pos.copy()
         self._last_collision_types = self._collision_types.copy()
-        self.collision_types = {'top': False, 'bottom': False, 'right': False, 'left': False}
+        self._collision_types = {'top': False, 'bottom': False, 'right': False, 'left': False}
 
         if noclip:
             self.pos[0] += movement[0] * dt
@@ -262,7 +227,7 @@ class Player(PhysicsEntity):
             self.pos[1] += movement[1] * dt
             self.rect.y = int(self.pos[1])
 
-            return self.collision_types.copy()
+            return self._collision_types.copy()
 
         normal_tiles = [tile_rect(t) for t in tiles if t.type == TileType.TILE]
         ramps: list[Ramp] = [t for t in tiles if t.type in [TileType.RAMP_LEFT, TileType.RAMP_RIGHT]]
@@ -277,13 +242,13 @@ class Player(PhysicsEntity):
 
         # ! TODO bugs fixen!
         # ! 1. wenn man auf einer geraden linie läuft und springt, wird man beim laden zurück gebuggt.
-        # ! 2. Manchmal werden falsche tiles als naheliegende erkannt, vorallem an chunkbordern.
+        # * 2. Manchmal werden falsche tiles als naheliegende erkannt, vorallem an chunkbordern.
         # ! 3. wenn man gegen ein tile läuft, dass man nicht hoch gehen kann, bugt man andauernt nach links und rechts.
         # * 4. Custom tiles werden nicht richtig gespeichert/geladen. Die Position im chunk ist zwar richtig, aber die collision position ist falsch
-        # ! 5. speicher dauer verkürzen. Es dauert eine halbe Sekunde pro chunk manchmal.... (dann auch async machen, sodass man trotzdem noch weiter machen kann)
+        # * 5. speicher dauer verkürzen. Es dauert eine halbe Sekunde pro chunk manchmal.... (dann auch async machen, sodass man trotzdem noch weiter machen kann)
 
         # return collisions
-        return self.collision_types.copy()
+        return self._collision_types.copy()
 
     def update(self, dt: float) -> None:
         self.animation.update(dt)
@@ -291,7 +256,7 @@ class Player(PhysicsEntity):
         # if abs(self.vel.y) > 5:
         #     self.set_state("jump_max")
 
-        if self.collision_types["bottom"] and self.get_state() != "idle":
+        if self._collision_types["bottom"] and self.get_state() != "idle":
             self.set_state("idle")
 
         if self.animation.new_img():  # TODO
