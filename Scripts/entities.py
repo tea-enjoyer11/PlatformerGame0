@@ -32,7 +32,7 @@ class PhysicsEntity:
     def _is_steppable_custom_tile(self, c_tile: CustomTile, tile_height: float) -> bool:
         # steppable = (TILESIZE - tile_height) < self.min_step_height * TILESIZE
         diff = abs(self._last_pos.y - self.pos.y)
-        print(diff, diff * TILESIZE, TILESIZE * self.min_step_height, diff <= TILESIZE * self.min_step_height)
+        # print(diff, diff * TILESIZE, TILESIZE * self.min_step_height, diff <= TILESIZE * self.min_step_height)
         return diff <= TILESIZE * self.min_step_height
 
 
@@ -53,6 +53,8 @@ class Player(PhysicsEntity):
         self.animation.state = "idle"
 
         self.mask = from_surface(self.animation.img())  # falls ich überhaupt diese Maske haben will, sonst weg damit!
+
+        self.last_movement_dir = [0, 0]
 
     def _handle_standart_colls(self, movement, dt: float, normal_tiles: list[Tile]) -> None:
         self.pos[0] += movement[0] * dt
@@ -185,15 +187,17 @@ class Player(PhysicsEntity):
             if tile_collision:
                 rel_x = self.rect.x - hitbox.x
 
-                rel_x = max(1, min(rel_x, c_tile.size[0]))  # sonst gibt es fehler
-                tile_height = CUSTOM_TILES_DATA[c_tile.height_data_idx][rel_x - 1]  # mit height und unterschied zur current height kann man min_step_height einbauen
+                if CUSTOM_TILES_ORIENTATION_DATA[c_tile.img_idx] == "left":
+                    rel_x += self.rect.w
 
+                rel_x = max(1, min(rel_x, c_tile.size[0]))  # sonst gibt es fehler
+                tile_height = CUSTOM_TILES_HEIGHT_DATA[c_tile.height_data_idx][rel_x - 1]  # mit height und unterschied zur current height kann man min_step_height einbauen
                 steppable = self._is_steppable_custom_tile(c_tile, tile_height)
 
                 if not steppable:
                     border_collision_threshold = 5
                     rel_x_border = self.rect.x - (hitbox.x + TILESIZE)  # wie nah ist der Spieler an der Kante?
-                    print(1111111, rel_x_border, border_collision_threshold)
+                    # print(1111111, rel_x_border, border_collision_threshold)
                     if movement[0] < 0 and (0 < abs(rel_x_border) <= border_collision_threshold):
                         tile_height = 0
                         self.rect.left = hitbox.right
@@ -207,16 +211,21 @@ class Player(PhysicsEntity):
                             self._collision_types['right'] = True
                             self.pos[0] = self.rect.x
 
-                # if tile_height:
-                adjust_height = TILESIZE + (c_tile.size[1] - TILESIZE)
-                target_y = hitbox.y + adjust_height - tile_height
-                if self.rect.bottom > target_y:
-                    self.rect.bottom = target_y
+                if tile_height:
+                    adjust_height = TILESIZE + (c_tile.size[1] - TILESIZE)
+                    target_y = hitbox.y + adjust_height - tile_height
+                    if self.rect.bottom > target_y:
+                        self.rect.bottom = target_y
 
-                    self.pos[1] = self.rect.y
-                    self._collision_types['bottom'] = True
+                        self.pos[1] = self.rect.y
+                        self._collision_types['bottom'] = True
 
     def move(self, movement: Sequence[float], tiles: list[Tile], dt: float, noclip: bool = False):
+        if movement[0] != 0:
+            self.last_movement_dir[0] = movement[0]
+        if movement[1] != 0:
+            self.last_movement_dir[1] = movement[1]
+
         self._last_pos = self.pos.copy()
         self._last_collision_types = self._collision_types.copy()
         self._collision_types = {'top': False, 'bottom': False, 'right': False, 'left': False}
@@ -271,9 +280,9 @@ class Player(PhysicsEntity):
         return self.animation.state
 
     def render(self, surface: Surface, offset: Vector2 = Vector2(0)) -> None:
-        img = self.animation.img()
-        if img:
-            image_offset = Vector2(8, 0)
-            surface.blit(img, Vector2(self.rect.topleft) - offset - image_offset)
+        # img = self.animation.img()
+        # if img:
+        #     image_offset = Vector2(8, 0)
+        #     surface.blit(img, Vector2(self.rect.topleft) - offset - image_offset)
 
         surface.blit(self.mask.to_surface(), (250, 250))

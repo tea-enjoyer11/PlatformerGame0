@@ -30,7 +30,8 @@ font = pygame.font.SysFont("arial", 21)
 # IMGS = [load_image("assets/tile.png"), load_image("assets/ramp_left.png"), load_image("assets/ramp_right.png")]
 # IMGS = [load_image("assets/tiles/grass/0.png"), load_image("assets/tiles/grass/3.png"), load_image("assets/tiles/grass/7.png")]
 
-CUSTOM_TILES_DATA = {}
+CUSTOM_TILES_HEIGHT_DATA = {}
+CUSTOM_TILES_ORIENTATION_DATA = {}
 
 
 def parse_master_tile_set_data(path: str, bg_color=(36, 0, 36)) -> None:
@@ -45,21 +46,28 @@ def parse_master_tile_set_data(path: str, bg_color=(36, 0, 36)) -> None:
             ret: dict[int, int] = {}
 
             for x_ in range(TILESIZE):
-                v = 0
+                # v = 0
                 t = 0  # thickness
                 for y_ in range(TILESIZE):
                     c = surf.get_at((x_, y_))
                     if c == bg_color:
                         continue
                     else:
-                        v = y_
+                        # v = y_
                         t += 1
                 if t == 0:
                     ret[x_] = 0
                 else:
-                    ret[x_] = TILESIZE - v + t
+                    ret[x_] = t
 
-            CUSTOM_TILES_DATA[f"c_tile({x};{y})"] = ret
+            idx = f"c_tile({x};{y})"
+            CUSTOM_TILES_HEIGHT_DATA[idx] = ret
+            # print(idx, ret)
+
+            if ret[0] < ret[15]:
+                CUSTOM_TILES_ORIENTATION_DATA[idx] = "left"
+            else:
+                CUSTOM_TILES_ORIENTATION_DATA[idx] = "right"
 
 
 parse_master_tile_set_data("assets/tileset template.png")

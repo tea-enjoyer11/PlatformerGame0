@@ -53,6 +53,8 @@ class TileType(Enum):
     RAMP_LEFT = auto()
     RAMP_RIGHT = auto()
     RAMP_CUSTOM = auto()
+    ORIENTATION_LEFT = auto()
+    ORIENTATION_RIGHT = auto()
 
 
 class Tile:

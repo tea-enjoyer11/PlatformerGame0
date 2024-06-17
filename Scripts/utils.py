@@ -30,14 +30,57 @@ def random_color(step=1):
 
 
 sysFont = pygame.font.SysFont("arial", 24)
+_circle_cache = {}
+
+
+def _circlepoints(r):
+    r = int(round(r))
+    if r in _circle_cache:
+        return _circle_cache[r]
+    x, y, e = r, 0, 1 - r
+    _circle_cache[r] = points = []
+    while x >= y:
+        points.append((x, y))
+        y += 1
+        if e < 0:
+            e += 2 * y - 1
+        else:
+            x -= 1
+            e += 2 * (y - x) - 1
+    points += [(y, x) for x, y in points if x > y]
+    points += [(-x, y) for x, y in points if x]
+    points += [(x, -y) for x, y in points if y]
+    points.sort()
+    return points
 
 
 def draw_text(screen: pygame.Surface, text: str, pos: tuple, font: pygame.Font = None,
-              antialias: bool = True, color: Color = Color(255, 255, 255), background_color: Color | None = None):
+              antialias: bool = True, color: Color = Color(255, 255, 255), background_color: Color | None = None,
+              outline_color: Color | None = None, outline_thickness: float = 1.0):
+    # outline code from https://stackoverflow.com/questions/54363047/how-to-draw-outline-on-the-fontpygame
     if not font:
         font = sysFont
 
-    screen.blit(font.render(text, antialias, color, background_color), pos)
+    textsurface = font.render(text, antialias, color, background_color)
+
+    if outline_color:
+        w = textsurface.get_width() + 2 * outline_thickness
+        h = font.get_height()
+
+        osurf = pygame.Surface((w, h + 2 * outline_thickness)).convert_alpha()
+        osurf.fill((0, 0, 0, 0))
+
+        surf = osurf.copy()
+
+        osurf.blit(font.render(text, True, outline_color).convert_alpha(), (0, 0))
+
+        for dx, dy in _circlepoints(outline_thickness):
+            surf.blit(osurf, (dx + outline_thickness, dy + outline_thickness))
+
+        surf.blit(textsurface, (outline_thickness, outline_thickness))
+        screen.blit(surf, pos)
+    else:
+        screen.blit(textsurface, pos)
 
 
 def hide_mouse(): pygame.mouse.set_visible(False)
