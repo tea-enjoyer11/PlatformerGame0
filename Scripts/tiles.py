@@ -3,6 +3,7 @@ from itertools import chain
 import os
 from Scripts.CONFIG import *
 from typing import Literal, Any
+import math
 
 
 class Queue:
@@ -55,6 +56,8 @@ class TileType(Enum):
     RAMP_CUSTOM = auto()
     ORIENTATION_LEFT = auto()
     ORIENTATION_RIGHT = auto()
+    GRASS_BLADE = auto()
+    GRASS_PATCH = auto()  # viele blades in einem tile
 
 
 class Tile:
@@ -148,6 +151,30 @@ class CustomRamp(Tile):
 
     def __repr__(self) -> str:
         return f"<{self.pos=}, {self.type=}, {self.img_idx=}, {self.size=}>"
+
+
+class GrassBlade(Tile):  # representiert nur einen grashalm
+    img_cache: dict[str, Surface] = {}
+
+    def __init__(self, pos: Vector2, img_idx: Any, tile_type: TileType = TileType.GRASS_BLADE) -> None:
+        super().__init__(pos, tile_type, img_idx)
+
+        self.base_img_idx = self.img_idx
+        self.rot = .0
+        self.rotation_function = lambda x: math.sin(x)
+        self.offset = (0, 0)
+
+    def update(self, dt) -> None: self.rotate(dt)
+
+    def rotate(self, dt: float) -> None:
+        self.rot = self.rotation_function(self.rot + dt)
+
+        self.img = f"{self.base_img_idx}{self.rot}"
+
+
+class GrassPatch(Tile):  # representiert alle Grashalme in einem tile
+    def __init__(self, pos: Vector2, tile_type: TileType = TileType.GRASS_PATCH) -> None:
+        super().__init__(pos, tile_type, img_idx=None)
 
 
 class Chunk:
