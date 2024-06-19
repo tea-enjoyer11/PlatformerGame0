@@ -155,21 +155,31 @@ class CustomRamp(Tile):
 
 class GrassBlade(Tile):  # representiert nur einen grashalm
     img_cache: dict[str, Surface] = {}
+    offset_cache: dict[str, Vector2] = {}
+    def rot_function(x) -> float: return 35 * math.sin(0.3 * x)
 
     def __init__(self, pos: Vector2, img_idx: Any, tile_type: TileType = TileType.GRASS_BLADE) -> None:
         super().__init__(pos, tile_type, img_idx)
 
         self.base_img_idx = self.img_idx
         self.rot = .0
-        self.rotation_function = lambda x: math.sin(x)
         self.offset = (0, 0)
+        self.update(0)
+        self.center_blit_offset = Vector2(GrassBlade.img_cache[f"{self.base_img_idx};0"].get_size()) / 2
 
-    def update(self, dt) -> None: self.rotate(dt)
+    def update(self, time: float) -> None: self.rotate(time)
 
-    def rotate(self, dt: float) -> None:
-        self.rot = self.rotation_function(self.rot + dt)
+    def rotate(self, time: float) -> None:
+        self.rot = GrassBlade.rot_function(time)
 
-        self.img = f"{self.base_img_idx}{self.rot}"
+        self.img_idx = f"{self.base_img_idx};{int(self.rot)}"
+
+        if self.img_idx not in GrassBlade.img_cache:
+            base_idx = f"{self.base_img_idx};0"
+            s = pygame.transform.rotate(GrassBlade.img_cache[base_idx], self.rot)
+            GrassBlade.img_cache[self.img_idx] = s
+            offset = Vector2(s.get_size()) / 2 - GrassBlade.offset_cache[base_idx] / 2
+            GrassBlade.offset_cache[self.img_idx] = offset
 
 
 class GrassPatch(Tile):  # representiert alle Grashalme in einem tile
@@ -180,7 +190,8 @@ class GrassPatch(Tile):  # representiert alle Grashalme in einem tile
 class Chunk:
     __slots__ = ("parent", "pos", "size", "_tiles", "_ghost_tiles", "_pre_renderd_surf",
                  "_pre_renderd_surf_size", "pre_render_offset",
-                 "_last_pre_render_data", "_pre_render_data")
+                 "_last_pre_render_data", "_pre_render_data",
+                 "_tiles_offgrid")
     default_pre_renderd_surf_size = Vector2(CHUNKSIZE * TILESIZE, CHUNKSIZE * TILESIZE)
 
     def __init__(self, parent: "TileMap", pos: Vector2, size) -> None:
@@ -188,6 +199,7 @@ class Chunk:
         self.pos = Vector2(pos)
         self.size = size
         self._tiles: dict[tuple, Tile] = {}
+        self._tiles_offgrid: list[Tile] = []  # vllt ne andere Datenstruktur, O(N^2)
         self._ghost_tiles: dict[tuple, Tile] = {}
 
         self._pre_renderd_surf: Surface = None
@@ -287,6 +299,9 @@ class Chunk:
         self._pre_render_data = self._calc_pre_render_data()
         return ret
 
+    def add_offgrid(self, tile: Tile) -> None:
+        self._tiles_offgrid.append(tile)
+
     def extend(self, tiles: list[Tile]) -> None:
         self._last_pre_render_data = self._calc_pre_render_data()
         for tile in tiles:
@@ -348,6 +363,7 @@ class Chunk:
         custom_ramps: list[CustomRamp] = []
         tiles: list[Tile] = []
         custom_tiles: list[CustomTile] = []
+        grass_blades: list[GrassBlade] = []
 
         for _, tile in self._tiles.items():
             if tile.type in [TileType.RAMP_LEFT, TileType.RAMP_RIGHT]:
@@ -356,8 +372,14 @@ class Chunk:
                 custom_ramps.append(tile)
             elif tile.type == TileType.TILE_CUSTOM:
                 custom_tiles.append(tile)
+            elif tile.type == TileType.GRASS_BLADE:
+                grass_blades.append(tile)
             else:
                 tiles.append(tile)
+
+        for tile in self._tiles_offgrid:  # muss eigentlich oben eingebaut werden.
+            if tile.type == TileType.GRASS_BLADE:
+                grass_blades.append(tile)
 
         for c_ramp in sorted(custom_ramps, key=lambda r: r.size.y, reverse=True):
             on_edge = self._tile_is_on_edge(c_ramp)
@@ -391,6 +413,19 @@ class Chunk:
             local_pos = (local_pos[0] * TILESIZE, local_pos[1] * TILESIZE + global_tile_offset.y - offset_y)
             l.append((IMGS[c_ramp.img_idx], local_pos))
             # print(local_pos)
+
+        for blade in grass_blades:
+            local_pos = (blade.pos.x % CHUNKSIZE, blade.pos.y % CHUNKSIZE)
+            local_pos = (local_pos[0] * TILESIZE, local_pos[1] * TILESIZE + global_tile_offset.y)
+
+            local_pos = (local_pos[0] - blade.center_blit_offset.x, local_pos[1] - blade.center_blit_offset.x)
+
+            local_offset = GrassBlade.offset_cache[blade.img_idx]
+            if local_offset.x < 0:
+                local_offset.x *= -2
+            local_pos = (local_pos[0] - local_offset[0], local_pos[1] - local_offset[1])
+
+            l.append((GrassBlade.img_cache[blade.img_idx], local_pos))
 
         w, h = self.size[0] * TILESIZE, self.size[1] * TILESIZE
         surf = Surface((w + global_tile_offset.x, h + global_tile_offset.y))
@@ -440,7 +475,7 @@ def on_edge_of_chunk(pos: Vector2) -> list[bool]:
 
 
 class TileMap:
-    __slots__ = ("_chunks", "chunk_size", "amount_of_tiles",
+    __slots__ = ("_chunks", "chunk_size", "amount_of_tiles", "amount_of_tiles_offgrid",
                  "amount_of_chunks", "culling_offset", "_pre_render_queue")
 
     def __init__(self, chunk_size=(CHUNKSIZE, CHUNKSIZE)) -> None:
@@ -450,6 +485,7 @@ class TileMap:
         self.chunk_size: tuple[int, int] = chunk_size
 
         self.amount_of_tiles = 0
+        self.amount_of_tiles_offgrid = 0
         self.amount_of_chunks = 0
         self._pre_render_queue: Queue[Chunk] = Queue()
 
@@ -494,12 +530,26 @@ class TileMap:
             c = Chunk(self, related_chunk_pos, size=self.chunk_size)
             self._chunks[related_chunk_pos] = c
             self.amount_of_chunks += 1
-            self.add_to_pre_render_queue(c)
+            # self.add_to_pre_render_queue(c)
 
         chunk = self._chunks[related_chunk_pos]
         if chunk.add(tile):
             self.amount_of_tiles += 1
             self.add_to_pre_render_queue(chunk)
+
+    def add_offgrid(self, tile: Tile) -> None:
+        related_chunk_pos = (tile.pos.x // self.chunk_size[0], tile.pos.y // self.chunk_size[1])
+
+        if related_chunk_pos not in self._chunks:
+            # chunk_pos = (related_chunk_pos[0] * TILESIZE, related_chunk_pos[1] * TILESIZE)
+            c = Chunk(self, related_chunk_pos, size=self.chunk_size)
+            self._chunks[related_chunk_pos] = c
+            self.amount_of_chunks += 1
+
+        chunk = self._chunks[related_chunk_pos]
+        chunk.add_offgrid(tile)
+        self.amount_of_tiles_offgrid += 1
+        self.add_to_pre_render_queue(chunk)
 
     def extend(self, tiles: list[Tile]) -> None:
         for tile in tiles:
@@ -618,6 +668,9 @@ class TileMap:
                 c.parent = tilemap
             chunks[tuple(c.pos)] = c
             # print(c._tiles)
+
+            if not hasattr(c, "_tiles_offgrid"):
+                setattr(c, "_tiles_offgrid", [])
         tilemap._chunks = chunks
         tilemap.pre_render_chunks()
         return tilemap

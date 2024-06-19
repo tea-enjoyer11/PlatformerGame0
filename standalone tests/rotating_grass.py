@@ -1,5 +1,5 @@
 import pygame
-from pygame import Surface, Rect
+from pygame import Surface, Rect, Vector2
 
 
 def load_image(path: str, flip_x: bool = False, flip_y: bool = False) -> Surface:

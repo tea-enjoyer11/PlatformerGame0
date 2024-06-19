@@ -32,10 +32,23 @@ pygame_gui_manager = pygame_gui.ui_manager.UIManager((800, 600))
 tile_map = TileMap()
 tile_map = TileMap.deserialize("saves/t1")
 tile_map.pre_render_chunks()
+global_time = 0
 
 img_cache = ImageCache(load_image)
 particle_group = ParticleGroup(img_cache)
 
+
+# loading grass blade images
+for f in os.listdir("assets/tiles/grass_blades"):
+    GrassBlade.img_cache[f"{f.split('.')[0]};{0}"] = load_image(f"assets/tiles/grass_blades/{f}")
+    GrassBlade.offset_cache[f"{f.split('.')[0]};{0}"] = Vector2(0, 0)
+grass_blades = []
+# testing grass blades
+for i in range(100):
+    gb = GrassBlade(Vector2(2 + i / 4, 20), random.randint(0, 6))
+    tile_map.add_offgrid(gb)
+    grass_blades.append(gb)
+tile_map.pre_render_chunks()
 
 # region Slider setup
 gravity_slider = pygame_gui.elements.UIHorizontalSlider(relative_rect=pygame.Rect(210, 500, 500, 30),
@@ -77,6 +90,10 @@ fps_idx = 0
 run = True
 while run:
     dt = mainClock.tick(fps_options[fps_idx]) * 0.001 * dt_multiplicator
+    global_time += dt
+
+    [b.update(global_time) for b in grass_blades]
+    tile_map.pre_render_chunks()  # TODO besseren weg finden alle grass blades zu updated ohne ALLE chunks zu prerendern
 
     # self.scroll += ((self.player.pos - Vector2(4, 4)) - RES / 4 / 2 - self.scroll) / 30
     scroll += ((p.pos - Vector2(TILESIZE / 2)) - DOWNSCALED_RES / 2 - scroll) / 30
