@@ -3,7 +3,8 @@ import time
 from Scripts.CONFIG import *
 from Scripts.utils import draw_text
 from Scripts.utils_math import clamp
-from Scripts.tiles import TileMap, Tile, CustomTile
+from Scripts.tiles import TileMap, Tile, CustomTile, GrassBlade
+from Scripts.timer import Timer, TimerManager
 SAVING_SUB_FOLDER = 1
 
 
@@ -25,6 +26,7 @@ def parse_master_tile_set(path: str, bg_color=(36, 0, 36)) -> list[list[Surface]
     return ret
 
 
+timermanager = TimerManager()
 RES = Vector2(1200, 700)
 left_menu_offset = 500
 tile_displaying_offset = 4
@@ -56,9 +58,15 @@ rect_tool_start: Vector2 = None
 rect_tool_end: Vector2 = None
 do_rect_tool = False
 selected_tile = (0, 0)
-
+hold_to_place = True
+last_mClicks = (False, False, False)
+click_timer = Timer(0.1, True, True)
 # tile set
 tiles = parse_master_tile_set("assets/tileset template.png")
+
+for f in os.listdir("assets/tiles/grass_blades"):
+    GrassBlade.img_cache[f"{f.split('.')[0]};{0}"] = load_image(f"assets/tiles/grass_blades/{f}")
+    GrassBlade.offset_cache[f"{f.split('.')[0]};{0}"] = Vector2(0, 0)
 
 
 def render_grid():
@@ -138,6 +146,19 @@ def backup():
         os.replace(f"{directory}/{file_name}", f"{directory}/backup{idx}/{file_name}")
 
 
+def get_mouse_pressed() -> tuple[bool, bool, bool]:
+    if hold_to_place:
+        return pygame.mouse.get_pressed()
+
+    a = pygame.mouse.get_pressed()
+    ret = [False, False, False]
+    for i, v in enumerate(a):
+        if not last_mClicks[i]:
+            ret[i] = a[i]
+
+    return tuple(ret)
+
+
 up = False
 left = False
 right = False
@@ -147,6 +168,8 @@ ctrl = False
 
 run = True
 while run:
+    last_mClicks = pygame.mouse.get_pressed()
+    timermanager.update()
     dt = clock.tick(0)
     for event in pygame.event.get():
         if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
@@ -171,6 +194,8 @@ while run:
             if event.key == pygame.K_j:
                 brush_type_idx = (brush_type_idx + 1) % len(brush_types)
                 brush_type = brush_types[brush_type_idx]
+            if event.key == pygame.K_q:
+                hold_to_place = not hold_to_place
 
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if tool == 1:  # rect tool
@@ -184,7 +209,7 @@ while run:
         rect_tool_end = mPos
 
     keys = pygame.key.get_pressed()
-    clicks = pygame.mouse.get_pressed()
+    clicks = get_mouse_pressed()
     last_mPos = mPos.copy()
     mPos = Vector2(pygame.mouse.get_pos())
     tile_position = Vector2(int((mPos[0] + offset.x) // TILESIZE), int((mPos[1] + offset.y) // TILESIZE))
@@ -208,23 +233,33 @@ while run:
     if right:
         offset.x += 2 * (1 + int(ctrl) * 4) * 1 / 4 * dt
 
-    if clicks[0]:
-        if mPos.x < left_menu_offset:
+    if clicks[0] and click_timer:
+        if mPos.x < left_menu_offset:  # menu
             p = mPos // (TILESIZE + tile_displaying_offset)
-            selected_tile = (
-                clamp(0, int(p.y), len(tiles) - 1),
-                clamp(0, int(p.x), len(tiles[0]) - 1)
-            )
-        else:
+            if p.y < len(tiles) and p.x < len(tiles[0]):
+                selected_tile = (
+                    clamp(0, int(p.y), len(tiles) - 1),
+                    clamp(0, int(p.x), len(tiles[0]) - 1)
+                )
+        else:  # tile placing
             if tool == 0:
                 if mode == 0:
+                    offgrid = False
                     for position in get_positions():
                         idx = f"c_tile({selected_tile[1]};{selected_tile[0]})"
-                        if selected_tile not in [(14, 0), (14, 1), (14, 2), (15, 0), (15, 1), (15, 2), (16, 0), (16, 1), (16, 2)]:
-                            t = CustomTile(position, idx, idx)
-                        else:
+                        if selected_tile in [(14, 0), (14, 1), (14, 2), (15, 0), (15, 1), (15, 2), (16, 0), (16, 1), (16, 2)]:
                             t = Tile(position, img_idx=f"TEST{idx}")
-                        tilemap.add(t)
+                        elif selected_tile in [(14, 3), (14, 4), (14, 5), (14, 6), (14, 7), (14, 8), (14, 9)]:
+                            img_idx = f"{selected_tile[1]-3}"
+                            p = mPos - Vector2(GrassBlade.img_cache[f"{img_idx};0"].get_size()) / 2
+                            t = GrassBlade((p + offset) / TILESIZE, img_idx=img_idx)
+                            offgrid = True
+                        else:
+                            t = CustomTile(position, idx, idx)
+                        if offgrid:
+                            tilemap.add_offgrid(t)
+                        else:
+                            tilemap.add(t)
                     tilemap.pre_render_chunks()
                 elif mode == 1:
                     tt = 0
@@ -248,8 +283,16 @@ while run:
         else:
             if tool == 0:
                 if mode == 0:
+                    offgrid = False
                     for position in get_positions():
-                        tilemap.remove(position)
+                        if selected_tile in [(14, 3), (14, 4), (14, 5), (14, 6), (14, 7), (14, 8), (14, 9)]:
+                            offgrid = True
+                        if offgrid:
+                            img_idx = f"{selected_tile[1]-3}"
+                            p = mPos - Vector2(GrassBlade.img_cache[f"{img_idx};0"].get_size()) / 2
+                            tilemap.remove_offgrid((p + offset) / TILESIZE)
+                        else:
+                            tilemap.remove(position)
                     tilemap.pre_render_chunks()
                 elif mode == 1:
                     tt = 0
@@ -320,6 +363,7 @@ while run:
     draw_text(screen, f"Brush type: {brush_type_desc[brush_type_idx]}", (left_ui_pos, 200), background_color="black")
     draw_text(screen, f"Brush strength: {brush_sizes[brush_size_idx]}", (left_ui_pos, 230), background_color="black")
     draw_text(screen, f"Tool: {tools_desc[tool]}", (left_ui_pos, 280), color="yellow", background_color="black")
+    draw_text(screen, f"Toggle clicking mode: Q - currently {'repeat' if hold_to_place else 'not repeat'}", (left_ui_pos, 310), color="yellow", background_color="black")
 
     pygame.display.flip()
     pygame.display.set_caption(f"{clock.get_fps():.0f}")
