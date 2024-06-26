@@ -163,7 +163,7 @@ class Player(PhysicsEntity):
                         self.pos[0] = self.rect.x
                 elif ramp.orientation == TileType.RAMP_LEFT:  # ! TODO bug beheben
                     rel_x_border = self.rect.x - hitbox.x + self.rect.width  # wie nah ist der Spieler an der Kante?
-                    print(rel_x_border, 0 < abs(rel_x_border) < border_collision_threshold, not steppable)
+                    # print(rel_x_border, 0 < abs(rel_x_border) < border_collision_threshold, not steppable)
                     if movement[0] > 0 and (0 < abs(rel_x_border) <= border_collision_threshold) and not steppable:
                         ramp_height = 0
                         self.rect.right = hitbox.left

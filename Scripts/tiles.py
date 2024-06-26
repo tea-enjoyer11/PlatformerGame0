@@ -10,7 +10,7 @@ class Queue:
     def __init__(self) -> None:
         self._content: list[object] = []
 
-    def empty(self) -> bool:
+    def empty(self) -> bool:  # True if empty
         return bool(len(self._content))
 
     def put(self, obj: object) -> None:
@@ -18,7 +18,7 @@ class Queue:
             self._content.append(obj)
 
     def get(self) -> object:
-        if not self.empty():
+        if self.empty():
             return self._content.pop(0)
         return None
 
@@ -171,6 +171,9 @@ class GrassBlade(Tile):  # representiert nur einen grashalm
     def update(self, time: float) -> None: self.rotate(time)
 
     def rotate(self, time: float) -> None:
+
+        # ! Idee: die rotations limitieren. Nur von -20 zu 20 in 4er steps. -> nur 10 rotation states
+
         self.rot = GrassBlade.rot_function(self.pos.x + time)
 
         self.img_idx = f"{self.base_img_idx};{int(self.rot)}"
@@ -442,7 +445,7 @@ class Chunk:
             local_offset = GrassBlade.offset_cache[blade.img_idx]
             if local_offset.y == 0:
                 local_offset.y = GrassBlade.img_half_size_cache[blade.img_idx][1] / 1.6
-            print(local_offset, blade.img_idx)
+            # print(local_offset, blade.img_idx)
             if local_offset.x < 0:
                 local_offset.x *= -2
             local_pos = (local_pos[0] - local_offset[0], local_pos[1] - local_offset[1])
@@ -525,12 +528,14 @@ class TileMap:
         # reinpackt und erst entfernt, wenn diese Funktion durch diese Liste durchgegangen ist.
 
         # New approach
-        # while not self._pre_render_queue.empty():
-        #     c = self._pre_render_queue.get()
-        #     c.pre_render()
+        # print(111111111, self._pre_render_queue._content)
+        while self._pre_render_queue.empty():
+            c = self._pre_render_queue.get()
+            # print(22222, c)
+            c.pre_render()
 
         # Old approach
-        [c.pre_render() for c in self._chunks.values()]  # if c.pre_render_needed()]
+        # [c.pre_render() for c in self._chunks.values()]  # if c.pre_render_needed()]
 
     def remove(self, pos: Vector2) -> None:
         related_chunk_pos = (pos.x // self.chunk_size[0], pos.y // self.chunk_size[1])
@@ -656,7 +661,10 @@ class TileMap:
     def get_all_offgrid(self) -> list[Tile]:
         r = []
         for _, chunk in self._chunks.items():
-            r += chunk.get_all_offgrid()
+            rr = chunk.get_all_offgrid()
+            if rr:
+                self.add_to_pre_render_queue(chunk)
+                r += rr
         return r
 
     def render(self, surf: Surface, target_pos: Vector2, offset: Vector2 = Vector2(0)) -> None:
@@ -716,6 +724,8 @@ class TileMap:
                 if isinstance(c._tiles_offgrid, list):
                     c._tiles_offgrid = {}
         tilemap._chunks = chunks
+        print(000000, chunks)
+        [tilemap.add_to_pre_render_queue(c) for c in chunks.values()]
         tilemap.pre_render_chunks()
         return tilemap
 

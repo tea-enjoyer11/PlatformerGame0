@@ -245,15 +245,16 @@ while run:
 
     master_screen.blit(pygame.transform.scale(screen, RES), (0, 0))
 
-    draw_text(master_screen, f"DT: {dt:.6f} DT multiplier:{dt_multiplicator:.4f}", (0, 80), outline_color="black")
-    draw_text(master_screen, f"{mainClock.get_fps():.0f}", (500, 0), outline_color="black")
-    draw_text(master_screen, f"{player_movement[0]:.2f}, {player_movement[1]:.2f}", (0, 200), outline_color="black")
-    draw_text(master_screen, f"TILEPOS: {p.pos // TILESIZE}\nPOS:{p.pos}\nNOCLIP: {noclip}", (500, 50), outline_color="black")
-    draw_text(master_screen, f"TILEMAP:\nAmount of Chunks: {len(tile_map._chunks)}\nAmount of Tiles: {tile_map.amount_of_tiles}", (500, 150), outline_color="black")
-    draw_text(master_screen, f"PARTICLES:\nAmount of Particles: {len(particle_group)}", (500, 250), outline_color="black")
-    draw_text(master_screen, f"{collisions}", (0, 0), font=font, outline_color="black")
-    draw_text(master_screen, f"{p._last_collision_types}", (0, 20), outline_color="black")
-    draw_text(master_screen, f"Are the last and current collisions the same: {collisions == p._last_collision_types}", (0, 40), outline_color="black")
+    outline_color = None
+    draw_text(master_screen, f"DT: {dt:.6f} DT multiplier:{dt_multiplicator:.4f}", (0, 80), outline_color=outline_color)
+    draw_text(master_screen, f"{mainClock.get_fps():.0f}", (500, 0), outline_color=outline_color)
+    draw_text(master_screen, f"{player_movement[0]:.2f}, {player_movement[1]:.2f}", (0, 200), outline_color=outline_color)
+    draw_text(master_screen, f"TILEPOS: {p.pos // TILESIZE}\nPOS:{p.pos}\nNOCLIP: {noclip}", (500, 50), outline_color=outline_color)
+    draw_text(master_screen, f"TILEMAP:\nAmount of Chunks: {len(tile_map._chunks)}\nAmount of Tiles: {tile_map.amount_of_tiles}", (500, 150), outline_color=outline_color)
+    draw_text(master_screen, f"PARTICLES:\nAmount of Particles: {len(particle_group)}", (500, 250), outline_color=outline_color)
+    draw_text(master_screen, f"{collisions}", (0, 0), font=font, outline_color=outline_color)
+    draw_text(master_screen, f"{p._last_collision_types}", (0, 20), outline_color=outline_color)
+    draw_text(master_screen, f"Are the last and current collisions the same: {collisions == p._last_collision_types}", (0, 40), outline_color=outline_color)
 
     pygame.display.flip()
 
