@@ -4,6 +4,7 @@ import os
 from Scripts.CONFIG import *
 from typing import Literal, Any
 import math
+from Scripts.utils_math import clamp_number_to_range_steps
 
 
 class Queue:
@@ -21,6 +22,9 @@ class Queue:
         if self.empty():
             return self._content.pop(0)
         return None
+
+    def __len__(self) -> int:
+        return len(self._content)
 
 
 NEIGHBOR_OFFSETS = [
@@ -158,6 +162,8 @@ class GrassBlade(Tile):  # representiert nur einen grashalm
     offset_cache: dict[str, Vector2] = {}
     img_half_size_cache: dict[str, tuple] = {}
     def rot_function(x) -> float: return 35 * math.sin(0.5 * x)
+    max_rotations = 20
+    rotation_angle = 35
 
     def __init__(self, pos: Vector2, img_idx: Any, tile_type: TileType = TileType.GRASS_BLADE) -> None:
         super().__init__(pos, tile_type, img_idx)
@@ -175,6 +181,7 @@ class GrassBlade(Tile):  # representiert nur einen grashalm
         # ! Idee: die rotations limitieren. Nur von -20 zu 20 in 4er steps. -> nur 10 rotation states
 
         self.rot = GrassBlade.rot_function(self.pos.x + time)
+        self.rot = clamp_number_to_range_steps(self.rot, -GrassBlade.rotation_angle, GrassBlade.rotation_angle, GrassBlade.rotation_angle * 2 / GrassBlade.max_rotations)
 
         self.img_idx = f"{self.base_img_idx};{int(self.rot)}"
 
@@ -528,7 +535,7 @@ class TileMap:
         # reinpackt und erst entfernt, wenn diese Funktion durch diese Liste durchgegangen ist.
 
         # New approach
-        # print(111111111, self._pre_render_queue._content)
+        # print(len(self._pre_render_queue))
         while self._pre_render_queue.empty():
             c = self._pre_render_queue.get()
             # print(22222, c)
@@ -570,7 +577,7 @@ class TileMap:
             c = Chunk(self, related_chunk_pos, size=self.chunk_size)
             self._chunks[related_chunk_pos] = c
             self.amount_of_chunks += 1
-            # self.add_to_pre_render_queue(c)
+            self.add_to_pre_render_queue(c)
 
         chunk = self._chunks[related_chunk_pos]
         if chunk.add(tile):
@@ -686,6 +693,7 @@ class TileMap:
                 if (x, y) in self._chunks:
                     l.append(self._chunks[(x, y)].get_pre_render(offset))
 
+        # print(l)
         surf.fblits(l)
 
         for y in range(p1[1], p2[1] + 1):

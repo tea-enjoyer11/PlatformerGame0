@@ -67,6 +67,7 @@ tiles = parse_master_tile_set("assets/tileset template.png")
 for f in os.listdir("assets/tiles/grass_blades"):
     GrassBlade.img_cache[f"{f.split('.')[0]};{0}"] = load_image(f"assets/tiles/grass_blades/{f}")
     GrassBlade.offset_cache[f"{f.split('.')[0]};{0}"] = Vector2(0, 0)
+    GrassBlade.img_half_size_cache[f"{f.split('.')[0]};{0}"] = tuple(Vector2(load_image(f"assets/tiles/grass_blades/{f}").get_size()) // 2)
 
 
 def render_grid():
@@ -253,7 +254,9 @@ while run:
                             img_idx = f"{selected_tile[1]-3}"
                             p = mPos - Vector2(GrassBlade.img_cache[f"{img_idx};0"].get_size()) / 2
                             t = GrassBlade((p + offset) / TILESIZE, img_idx=img_idx)
+                            t.img_idx = f"{img_idx};0"
                             offgrid = True
+                            print(selected_tile, img_idx, t.img_idx)
                         else:
                             t = CustomTile(position, idx, idx)
                         if offgrid:

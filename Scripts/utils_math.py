@@ -56,3 +56,8 @@ def reverseInts(list_: list) -> list:
             listCopy.append(pos * -1)
 
     return listCopy
+
+
+def clamp_number_to_range_steps(n, start, end, step) -> float:
+    n = clamp(start, n, end)
+    return round(n / step) * step

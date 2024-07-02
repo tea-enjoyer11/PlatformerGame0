@@ -141,7 +141,7 @@ while run:
     for tile in close_tiles:
         render_collision_mesh(screen, "yellow", tile, offset=scroll)
 
-    # Buttons ------------------------------------------------ #
+    # region Buttons ------------------------------------------------ #
     for event in pygame.event.get():
         if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
             run = False
@@ -230,6 +230,7 @@ while run:
         # endregion
 
         pygame_gui_manager.process_events(event)
+    # endreion
 
     m_pos = tuple(pygame.Vector2(pygame.mouse.get_pos()))
     if pygame.mouse.get_pressed()[0]:
