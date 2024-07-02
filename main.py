@@ -91,6 +91,8 @@ run = True
 while run:
     dt = mainClock.tick(fps_options[fps_idx]) * 0.001 * dt_multiplicator
     global_time += dt
+    def rot_function(x): return int(math.sin(global_time * 100 / 60 + x / 100) * 25)
+    GrassBlade.rot_function = rot_function
 
     [b.update(global_time) for b in tile_map.get_all_offgrid()]
     tile_map.pre_render_chunks()  # TODO besseren weg finden alle grass blades zu updated ohne ALLE chunks zu prerendern
