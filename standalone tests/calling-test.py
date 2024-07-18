@@ -11,13 +11,33 @@ def call_after(callable_after: Callable[..., Any]) -> Callable[[Callable[..., An
     return decorator
 
 
-def foo2() -> None:
-    print("foo2 called")
+def call_before(callable_before: Callable[..., Any]) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            callable_before(*args, **kwargs)
+            result = func(*args, **kwargs)
+            return result
+        return wrapper
+    return decorator
 
 
-@call_after(foo2)
-def foo() -> None:
-    print("foo called")
+def beispiel2() -> None:
+    print("beispiel2 called")
 
 
-foo()
+@call_after(beispiel2)
+def beispiel() -> None:
+    print("beispiel called")
+
+
+def test2() -> None:
+    print("test2 called")
+
+
+@call_before(test2)
+def test() -> None:
+    print("test called")
+
+
+beispiel()
+test()
