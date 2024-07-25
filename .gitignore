@@ -1,2 +1,5 @@
+/.venv/
+
 /__pycache__/
+/Renderer_Engine/__pycache__/
 /Scripts/__pycache__/
