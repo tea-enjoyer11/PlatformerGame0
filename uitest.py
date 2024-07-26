@@ -1,66 +1,68 @@
 import pygame
-import pygame_gui
-import pygame_gui.elements.ui_label
-import pygame_gui.elements.ui_text_box
-import pygame_gui.elements.ui_text_entry_box
-# https://pygame-gui.readthedocs.io/en/latest/index.html
+from Scripts.Ui import *
+from pygame import Rect
+
+
+def p(a, b, c): print("hello", a, b, c)
+def p1(a, b, c): print("bye", a, b, c)
+
 
 pygame.init()
 
 pygame.display.set_caption('Quick Start')
-window_surface = pygame.display.set_mode((800, 600))
+screen = pygame.display.set_mode((800, 600))
 
-background = pygame.Surface((800, 600))
-background.fill(pygame.Color('#000000'))
-
-manager = pygame_gui.UIManager((800, 600))
-
-hello_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect((350, 275), (100, 50)),
-                                            text='Say Hello',
-                                            manager=manager)
-slider = pygame_gui.elements.UIHorizontalSlider(relative_rect=pygame.Rect(110, 10, 500, 30),
-                                                start_value=50,
-                                                value_range=(100, 1000),
-                                                manager=manager)
-textbox = pygame_gui.elements.ui_text_entry_box.UITextEntryBox(pygame.Rect(10, 10, 90, 30),
-                                                               "...",
-                                                               manager)
-lbl = pygame_gui.elements.ui_label.UILabel(pygame.Rect(10, 100, 90, 30),
-                                           "label!",
-                                           manager)
 clock = pygame.time.Clock()
 is_running = True
 
+manager = get_ui_manager()
+btn1 = Button(Rect(20, 20, 100, 100))
+btn1.on_click = p
+btn1.on_click_params = (23.1, 2.321, 0.01)
+btn1.on_release = p1
+btn1.on_release_params = (32, 223.1, 2.321)
+
+lbl = Label(Rect(10, 10, 100, 30), text="ich bin ein label")
+lbl.clip_text = True
+
+
+icon = make_icon_from_letter("R", (200, 100), (0, 0, 0), (125, 52, 217))
+
+
 while is_running:
-    time_delta = clock.tick(60) / 1000.0
+    dt = clock.tick(60) * .001
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             is_running = False
 
-        if event.type == pygame_gui.UI_BUTTON_PRESSED:
-            if event.ui_element == hello_button:
-                print('Hello World!')
+        # if event.type == pygame_gui.UI_BUTTON_PRESSED:
+        #     if event.ui_element == hello_button:
+        #         print('Hello World!')
 
-        if event.type == pygame_gui.UI_HORIZONTAL_SLIDER_MOVED:
-            if event.ui_element == slider:
-                print('current slider value:', event.value)
-                textbox.set_text(str(event.value))
+        # if event.type == pygame_gui.UI_HORIZONTAL_SLIDER_MOVED:
+        #     if event.ui_element == slider:
+        #         print('current slider value:', event.value)
+        #         textbox.set_text(str(event.value))
 
-        if event.type == pygame_gui.UI_TEXT_ENTRY_CHANGED:
-            if event.ui_element == textbox:
-                print("Changed text:", event.text)
-                val = slider.get_current_value()
-                try:
-                    val = max(100, min(int(event.text), 1000))
-                except ValueError:
-                    print(f"Converting error: {event.text=}")
-                slider.set_current_value(val)
+        # if event.type == pygame_gui.UI_TEXT_ENTRY_CHANGED:
+        #     if event.ui_element == textbox:
+        #         print("Changed text:", event.text)
+        #         val = slider.get_current_value()
+        #         try:
+        #             val = max(100, min(int(event.text), 1000))
+        #         except ValueError:
+        #             print(f"Converting error: {event.text=}")
+        #         slider.set_current_value(val)
 
-        manager.process_events(event)
+        # manager.process_events(event)
 
-    manager.update(time_delta)
+    manager.update(dt)
 
-    window_surface.blit(background, (0, 0))
-    manager.draw_ui(window_surface)
+    screen.fill((124, 42, 27))
+    # manager.draw_ui(screen)
+
+    manager.render(screen)
+
+    screen.blit(icon, (200, 100))
 
     pygame.display.update()
