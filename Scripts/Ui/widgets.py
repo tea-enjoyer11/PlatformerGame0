@@ -13,6 +13,18 @@ UI_RELEASE = pygame.USEREVENT + 1
 UI_HOVER_ENTER = pygame.USEREVENT + 2
 UI_HOVER = pygame.USEREVENT + 3
 UI_HOVER_EXIT = pygame.USEREVENT + 4
+UI_SLIDER_HORIZONTAL_MOVED = pygame.USEREVENT + 5
+UI_SLIDER_VERTICAL_MOVED = pygame.USEREVENT + 6
+
+
+def get_event_name(e) -> str:
+    d = {
+        UI_CLICK: "UI_CLICK", UI_RELEASE: "UI_RELEASE",
+        UI_HOVER_ENTER: "UI_HOVER_ENTER", UI_HOVER: "UI_HOVER",
+        UI_HOVER_EXIT: "UI_HOVER_EXIT", UI_SLIDER_HORIZONTAL_MOVED: "UI_SLIDER_HORIZONTAL_MOVED",
+        UI_SLIDER_VERTICAL_MOVED: "UI_SLIDER_VERTICAL_MOVED"
+    }
+    return d[e]
 
 
 @lru_cache(maxsize=1)
@@ -20,60 +32,93 @@ def get_ui_manager() -> "_Manager":
     return _Manager()
 
 
+def post_event(type: int, **kwargs) -> None:
+    ev = pygame.event.Event(type, name=get_event_name(type), **kwargs)
+    pygame.event.post(ev)
+
+
 class _Manager:
     def __init__(self) -> None:
-        self.widgets: Dict[str, List[Widget]] = {
-            "buttons": [],
-            "labels": []
-        }
+        self.widgets: List[Widget] = []
+
+        self.last_topmost_widget: Widget = None
+        self.topmost_widget: Widget = None
 
     def add(self, widget: "Widget") -> None:
-        if isinstance(widget, Button):
-            self.widgets["buttons"].append(widget)
-        if isinstance(widget, Label):
-            self.widgets["labels"].append(widget)
+        self.widgets.append(widget)
+        self.widgets.sort(key=lambda w: w.z_index, reverse=True)
 
-    def render_ui(self, surf):
-        [w.render(surf) for w in self.widgets["buttons"]]
-        [w.render(surf) for w in self.widgets["labels"]]
+    def render_ui(self, surf: Surface) -> None:
+        for widget in sorted(self.widgets, key=lambda w: w.z_index, reverse=False):
+            widget.render(surf)
+
+    def render_debug(self, surf: Surface) -> None:
+        if self.last_topmost_widget:
+            r = self.last_topmost_widget.rect.copy()
+            r.inflate_ip(25, 25)
+            s = pygame.Surface(r.size)
+            s.fill((255, 0, 0))
+            s.set_alpha(100)
+            surf.blit(s, r, special_flags=pygame.BLEND_ADD)
+
+        if self.topmost_widget:
+            r = self.topmost_widget.rect.copy()
+            r.inflate_ip(25, 25)
+            s = pygame.Surface(r.size)
+            s.fill((0, 255, 0))
+            s.set_alpha(100)
+            surf.blit(s, r, special_flags=pygame.BLEND_ADD)
 
     def update(self, dt: float):
         mPos = pygame.mouse.get_pos()
+        mpress = pygame.mouse.get_pressed()
         mjpress = pygame.mouse.get_just_pressed()
         mjrelease = pygame.mouse.get_just_released()
 
-        for w in self.widgets["buttons"]:
-            w_hover = w.rect.collidepoint(mPos)
+        self.last_topmost_widget = self.topmost_widget
 
-            # ! Achtung: was, wenn zwei Widgets übereinander liegen???
-            if w_hover:
-                if w._hover_state == 0:
-                    w._hover_state = 1
-                if w._hover_state == 1:
-                    w._hover_state = 2
+        none_hoverd = True
+        for widget in self.widgets:
+            if widget.rect.collidepoint(mPos):
+                self.topmost_widget = widget
+                none_hoverd = False
+                break
+        if none_hoverd:
+            self.topmost_widget = None
+
+        for widget in self.widgets:
+            # region Hoverlogic (vllt nicht allzu schön geschrieben)
+            if widget == self.topmost_widget:
+                if widget._hover_state == 0:
+                    widget._hover_state = 1
+                elif widget._hover_state == 1:
+                    widget._hover_state = 2
             else:
-                if w._hover_state == 2:
-                    w._hover_state = 3
-                if w._hover_state == 3:
-                    w._hover_state = 0
+                if widget._hover_state == 2:
+                    widget._hover_state = 3
+                elif widget._hover_state == 3:
+                    widget._hover_state = 0
 
-            if w._hover_state == 1:
-                ev = pygame.event.Event(UI_HOVER_ENTER, attr1="click", ui_element=w)
-                pygame.event.post(ev)
-            if w._hover_state == 2:
-                ev = pygame.event.Event(UI_HOVER, attr1="click", ui_element=w)
-                pygame.event.post(ev)
-            if w._hover_state == 3:
-                ev = pygame.event.Event(UI_HOVER_EXIT, attr1="click", ui_element=w)
-                pygame.event.post(ev)
+            if widget._hover_state == 1:
+                post_event(UI_HOVER_ENTER, ui_element=widget)
+            elif widget._hover_state == 2:
+                post_event(UI_HOVER, ui_element=widget)
+            elif widget._hover_state == 3:
+                post_event(UI_HOVER_EXIT, ui_element=widget)
+            # endregion
 
-            if w_hover:
-                if mjpress[0]:
-                    ev = pygame.event.Event(UI_CLICK, attr1="click", ui_element=w)
-                    pygame.event.post(ev)
-                if mjrelease[0]:
-                    ev = pygame.event.Event(UI_RELEASE, attr1="release", ui_element=w)
-                    pygame.event.post(ev)
+        if isinstance(self.topmost_widget, Button):
+            if mjpress[0]:
+                post_event(UI_CLICK, ui_element=widget)
+            if mjrelease[0]:
+                post_event(UI_RELEASE, ui_element=widget)
+
+        if isinstance(self.topmost_widget, SliderHorizontal):
+            if mpress[0]:
+                self.topmost_widget.update(*mPos)
+        if isinstance(self.last_topmost_widget, SliderVertical):
+            if mpress[0]:
+                self.last_topmost_widget.update(*mPos)
 
     def process_event(self, event: pygame.event.Event) -> None: ...
 
@@ -94,9 +139,9 @@ class WidgetGroup:
 
 
 class Widget:
-    def __init__(self, rect, image: pygame.Surface = None) -> None:
-        get_ui_manager().add(self)
+    def __init__(self, rect, image: pygame.Surface = None, z_index: int = 0) -> None:
 
+        self.z_index = z_index
         self.rect = rect
         self._image = image
         self._blendmode = pygame.BLENDMODE_NONE
@@ -104,6 +149,8 @@ class Widget:
         self._blit_data = [self._image, self.rect, None, self._blendmode]  # 1. None = pygame.Surface
 
         self._hover_state = 0  # 0: nix, 1: enter, 2: hover, 3: exit
+
+        get_ui_manager().add(self)
 
     # region Widget properties
     @property
@@ -121,8 +168,8 @@ class Widget:
 
 
 class Button(Widget):
-    def __init__(self, r, image: Surface = None) -> None:
-        super().__init__(r, image)
+    def __init__(self, r, image: Surface = None, z_index: int = 0) -> None:
+        super().__init__(r, image, z_index)
 
     def render(self, surface: Surface) -> None:
         # super().render(surface)
@@ -133,8 +180,8 @@ class Button(Widget):
 
 
 class Label(Widget):
-    def __init__(self, r, font: pygame.Font = None, text: str = None) -> None:
-        super().__init__(r)
+    def __init__(self, r, font: pygame.Font = None, text: str = None, z_index: int = 0) -> None:
+        super().__init__(r, None, z_index)
 
         if font:
             self._font = font
@@ -167,6 +214,64 @@ class Label(Widget):
         surf.blit(txt_surf, self.rect.topleft)
 
 
+class SliderHorizontal(Widget):
+    def __init__(self, rect, min: float, max: float, image: Surface = None, percentage: float = .5) -> None:
+        super().__init__(rect, image)
+
+        self._min = min
+        self._max = max
+        self._percent = percentage
+
+    def val(self) -> float:
+        return self._min + (self._max - self._min) * self._percent
+
+    def update(self, mx: int, my: int) -> None:
+        self.calc_new_percent(mx)
+
+    def calc_new_percent(self, mx: int) -> None:
+        rel_x = max(min(mx - self.rect.x, self.rect.w), 0)
+        self._percent = rel_x / self.rect.w
+        post_event(UI_SLIDER_HORIZONTAL_MOVED, ui_element=self, value=self.val())
+
+    def render(self, surface: Surface) -> None:
+        super().render(surface)
+
+        # select slider
+        x = self.rect.x + self.rect.w * self._percent
+        start = (x, self.rect.y)
+        end = (x, self.rect.y + self.rect.h)
+        pygame.draw.line(surface, (0, 0, 0), start, end, width=3)
+
+
+class SliderVertical(Widget):
+    def __init__(self, rect, min: float, max: float, image: Surface = None, percentage: float = .5) -> None:
+        super().__init__(rect, image)
+
+        self._min = min
+        self._max = max
+        self._percent = percentage
+
+    def val(self) -> float:
+        return self._min + (self._max - self._min) * self._percent
+
+    def update(self, mx: int, my: int) -> None:
+        self.calc_new_percent(my)
+
+    def calc_new_percent(self, my: int) -> None:
+        rel_y = max(min(my - self.rect.y, self.rect.h), 0)
+        self._percent = rel_y / self.rect.h
+        post_event(UI_SLIDER_VERTICAL_MOVED, ui_element=self, value=self.val())
+
+    def render(self, surface: Surface) -> None:
+        super().render(surface)
+
+        # select slider
+        y = self.rect.y + self.rect.h * self._percent
+        start = (self.rect.x, y)
+        end = (self.rect.x + self.rect.w, y)
+        pygame.draw.line(surface, (0, 0, 0), start, end, width=3)
+
+
 def make_icon_from_letter(letter: str, size: Tuple, color: Color, bg_color: Color) -> Surface:
     surf = Surface(size)
     surf.fill(bg_color)
@@ -177,6 +282,23 @@ def make_icon_from_letter(letter: str, size: Tuple, color: Color, bg_color: Colo
     font = pygame.font.SysFont("arial", max(0, min(size[1], size[0])))
 
     l = font.render(letter, True, color)
+
+    center_offset = (size[0]/2 - l.get_width()/2, size[1]/2 - l.get_height()/2)
+    surf.blit(l, center_offset)
+    return surf
+
+
+def make_icon_from_text(text: str, size: Tuple, color: Color, bg_color: Color) -> Surface:
+    surf = Surface(size)
+    surf.fill(bg_color)
+
+    if len(text) > 1:
+        s = max(0, min(size[1], size[0])) / len(text) * 1.5
+    else:
+        s = max(0, min(size[1], size[0]))
+    font = pygame.font.SysFont("arial", int(s))
+
+    l = font.render(text, True, color)
 
     center_offset = (size[0]/2 - l.get_width()/2, size[1]/2 - l.get_height()/2)
     surf.blit(l, center_offset)

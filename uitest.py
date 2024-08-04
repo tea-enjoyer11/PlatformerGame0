@@ -19,10 +19,13 @@ manager = get_ui_manager()
 
 icon = make_icon_from_letter("R", (100, 100), (0, 0, 0), (125, 52, 217))
 btn1 = Button(Rect(100, 10, 100, 100), image=icon)
-btn2 = Button(Rect(210, 10, 100, 100), image=make_icon_from_letter("G", (100, 100), (0, 0, 0), (125, 52, 217)))
+btn2 = Button(Rect(210, 10, 100, 100), image=make_icon_from_text("btn2", (100, 100), (0, 0, 0), (125, 52, 217)))
 
-lbl = Label(Rect(10, 10, 100, 30), text="ich bin ein label")
+lbl = Label(Rect(10, 10, 100, 30), text="ich bin ein label", z_index=1)
 lbl.clip_text = True
+
+slider1 = SliderHorizontal(Rect(20, 250, 300, 25), 0, 100)
+slider2 = SliderVertical(Rect(500, 50, 30, 450), 0, 200)
 
 
 while is_running:
@@ -30,7 +33,7 @@ while is_running:
 
     dt = clock.tick(30) * .001
     for event in pygame.event.get():
-        if event.type == pygame.QUIT:
+        if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
             is_running = False
 
         if event.type == UI_CLICK:
@@ -38,39 +41,21 @@ while is_running:
                 print("btn1 clicked")
             if event.ui_element == btn2:
                 print("btn2 clicked")
-            # print("click  ", event)
 
         if event.type == UI_RELEASE:
             if event.ui_element == btn1:
                 print("btn1 released")
             if event.ui_element == btn2:
                 print("btn2 released")
-            # print("release", event)
 
-        # if event.type == pygame_gui.UI_BUTTON_PRESSED:
-        #     if event.ui_element == hello_button:
-        #         print('Hello World!')
+        if event.type in {UI_CLICK, UI_RELEASE, UI_HOVER_ENTER, UI_HOVER, UI_HOVER_EXIT, UI_SLIDER_HORIZONTAL_MOVED, UI_SLIDER_VERTICAL_MOVED}:
+            print(event)
 
-        # if event.type == pygame_gui.UI_HORIZONTAL_SLIDER_MOVED:
-        #     if event.ui_element == slider:
-        #         print('current slider value:', event.value)
-        #         textbox.set_text(str(event.value))
-
-        # if event.type == pygame_gui.UI_TEXT_ENTRY_CHANGED:
-        #     if event.ui_element == textbox:
-        #         print("Changed text:", event.text)
-        #         val = slider.get_current_value()
-        #         try:
-        #             val = max(100, min(int(event.text), 1000))
-        #         except ValueError:
-        #             print(f"Converting error: {event.text=}")
-        #         slider.set_current_value(val)
-
-        # manager.process_events(event)
+        manager.process_event(event)
 
     manager.update(dt)
 
-    # manager.draw_ui(screen)
     manager.render_ui(screen)
+    manager.render_debug(screen)
 
     pygame.display.update()
