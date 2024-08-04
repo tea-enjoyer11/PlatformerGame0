@@ -16,24 +16,36 @@ clock = pygame.time.Clock()
 is_running = True
 
 manager = get_ui_manager()
-btn1 = Button(Rect(20, 20, 100, 100))
-btn1.on_click = p
-btn1.on_click_params = (23.1, 2.321, 0.01)
-btn1.on_release = p1
-btn1.on_release_params = (32, 223.1, 2.321)
+
+icon = make_icon_from_letter("R", (100, 100), (0, 0, 0), (125, 52, 217))
+btn1 = Button(Rect(100, 10, 100, 100), image=icon)
+btn2 = Button(Rect(210, 10, 100, 100), image=make_icon_from_letter("G", (100, 100), (0, 0, 0), (125, 52, 217)))
 
 lbl = Label(Rect(10, 10, 100, 30), text="ich bin ein label")
 lbl.clip_text = True
 
 
-icon = make_icon_from_letter("R", (200, 100), (0, 0, 0), (125, 52, 217))
-
-
 while is_running:
-    dt = clock.tick(60) * .001
+    screen.fill((124, 42, 27))
+
+    dt = clock.tick(30) * .001
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             is_running = False
+
+        if event.type == UI_CLICK:
+            if event.ui_element == btn1:
+                print("btn1 clicked")
+            if event.ui_element == btn2:
+                print("btn2 clicked")
+            # print("click  ", event)
+
+        if event.type == UI_RELEASE:
+            if event.ui_element == btn1:
+                print("btn1 released")
+            if event.ui_element == btn2:
+                print("btn2 released")
+            # print("release", event)
 
         # if event.type == pygame_gui.UI_BUTTON_PRESSED:
         #     if event.ui_element == hello_button:
@@ -58,11 +70,7 @@ while is_running:
 
     manager.update(dt)
 
-    screen.fill((124, 42, 27))
     # manager.draw_ui(screen)
-
-    manager.render(screen)
-
-    screen.blit(icon, (200, 100))
+    manager.render_ui(screen)
 
     pygame.display.update()

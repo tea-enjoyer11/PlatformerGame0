@@ -2,10 +2,17 @@ import pygame
 from pygame import Rect, Surface, Color
 
 from functools import lru_cache
-from typing import Callable, Iterable, Dict, List, Tuple
+from typing import Callable, Iterable, Dict, List, Tuple, Set
 
 pygame.font.init()
 _default_font = pygame.sysfont.SysFont("arial", 18)
+
+
+UI_CLICK = pygame.USEREVENT + 0
+UI_RELEASE = pygame.USEREVENT + 1
+UI_HOVER_ENTER = pygame.USEREVENT + 2
+UI_HOVER = pygame.USEREVENT + 3
+UI_HOVER_EXIT = pygame.USEREVENT + 4
 
 
 @lru_cache(maxsize=1)
@@ -17,7 +24,8 @@ class _Manager:
     def __init__(self) -> None:
         self.widgets: Dict[str, List[Widget]] = {
             "buttons": [],
-            "labels": []}
+            "labels": []
+        }
 
     def add(self, widget: "Widget") -> None:
         if isinstance(widget, Button):
@@ -25,7 +33,7 @@ class _Manager:
         if isinstance(widget, Label):
             self.widgets["labels"].append(widget)
 
-    def render(self, surf):
+    def render_ui(self, surf):
         [w.render(surf) for w in self.widgets["buttons"]]
         [w.render(surf) for w in self.widgets["labels"]]
 
@@ -35,18 +43,78 @@ class _Manager:
         mjrelease = pygame.mouse.get_just_released()
 
         for w in self.widgets["buttons"]:
-            if w.rect.collidepoint(mPos):
+            w_hover = w.rect.collidepoint(mPos)
+
+            # ! Achtung: was, wenn zwei Widgets übereinander liegen???
+            if w_hover:
+                if w._hover_state == 0:
+                    w._hover_state = 1
+                if w._hover_state == 1:
+                    w._hover_state = 2
+            else:
+                if w._hover_state == 2:
+                    w._hover_state = 3
+                if w._hover_state == 3:
+                    w._hover_state = 0
+
+            if w._hover_state == 1:
+                ev = pygame.event.Event(UI_HOVER_ENTER, attr1="click", ui_element=w)
+                pygame.event.post(ev)
+            if w._hover_state == 2:
+                ev = pygame.event.Event(UI_HOVER, attr1="click", ui_element=w)
+                pygame.event.post(ev)
+            if w._hover_state == 3:
+                ev = pygame.event.Event(UI_HOVER_EXIT, attr1="click", ui_element=w)
+                pygame.event.post(ev)
+
+            if w_hover:
                 if mjpress[0]:
-                    w._clicked()
+                    ev = pygame.event.Event(UI_CLICK, attr1="click", ui_element=w)
+                    pygame.event.post(ev)
                 if mjrelease[0]:
-                    w._released()
+                    ev = pygame.event.Event(UI_RELEASE, attr1="release", ui_element=w)
+                    pygame.event.post(ev)
+
+    def process_event(self, event: pygame.event.Event) -> None: ...
+
+
+# ist das überhaupt nötig?
+class WidgetGroup:
+    def __init__(self) -> None:
+        self.__widgets: List[Widget] = []
+
+    def add(self, widget: "Widget") -> None:
+        self.__widgets.append(widget)
+
+    def remove(self, widget: "Widget") -> None:
+        if widget in self.__widgets:
+            self.__widgets.remove(widget)
+        #     return
+        # raise ValueError("Widget not in WidgetGroup")
 
 
 class Widget:
-    def __init__(self, r) -> None:
+    def __init__(self, rect, image: pygame.Surface = None) -> None:
         get_ui_manager().add(self)
 
-        self.rect = r
+        self.rect = rect
+        self._image = image
+        self._blendmode = pygame.BLENDMODE_NONE
+
+        self._blit_data = [self._image, self.rect, None, self._blendmode]  # 1. None = pygame.Surface
+
+        self._hover_state = 0  # 0: nix, 1: enter, 2: hover, 3: exit
+
+    # region Widget properties
+    @property
+    def blendmode(self) -> int:
+        return self._blendmode
+
+    @blendmode.setter
+    def blendmode(self, blendmode: int) -> None:
+        self._blendmode = blendmode
+        self._blit_data[3] = blendmode
+    # endregion
 
     def render(self, surf: Surface):
         pygame.draw.rect(surf, "white", self.rect)
@@ -54,49 +122,14 @@ class Widget:
 
 class Button(Widget):
     def __init__(self, r, image: Surface = None) -> None:
-        super().__init__(r)
-
-        self.__image = image
-
-        self.__on_click: Callable = None
-        self.__on_click_params: Iterable = None
-        self.__on_release: Callable = None
-        self.__on_release_params: Iterable = None
-
-    # region button properties
-    @property
-    def on_click(self) -> Callable: return self.__on_click
-
-    @on_click.setter
-    def on_click(self, val: Callable) -> None: self.__on_click = val
-
-    @property
-    def on_click_params(self) -> Iterable: return self.__on_click_params
-
-    @on_click_params.setter
-    def on_click_params(self, val: Iterable) -> None: self.__on_click_params = val
-
-    @property
-    def on_release(self) -> Callable: return self.__on_release
-
-    @on_release.setter
-    def on_release(self, val: Callable) -> None: self.__on_release = val
-
-    @property
-    def on_release_params(self) -> Iterable: return self.__on_release_params
-
-    @on_release_params.setter
-    def on_release_params(self, val: Iterable) -> None: self.__on_release_params = val
-    # endregion
-
-    def _clicked(self) -> None:
-        self.__on_click(* self.__on_click_params)
-
-    def _released(self) -> None:
-        self.__on_release(* self.__on_release_params)
+        super().__init__(r, image)
 
     def render(self, surface: Surface) -> None:
-        ...
+        # super().render(surface)
+        if self._image:
+            surface.blit(*self._blit_data)
+        else:
+            pygame.draw.rect(surface, "white", self.rect)
 
 
 class Label(Widget):
@@ -104,30 +137,30 @@ class Label(Widget):
         super().__init__(r)
 
         if font:
-            self.__font = font
+            self._font = font
         else:
-            self.__font = _default_font
-        self.__text: str = text
-        self.__clip_text = False
+            self._font = _default_font
+        self._text: str = text
+        self._clip_text = False
 
-    # region label properties
+    # region Label properties
     @property
-    def text(self) -> str: return self.__text
+    def text(self) -> str: return self._text
 
     @text.setter
-    def text(self, val: str): self.__text = val
+    def text(self, val: str): self._text = val
 
     @property
-    def clip_text(self) -> bool: return self.__clip_text
+    def clip_text(self) -> bool: return self._clip_text
 
     @clip_text.setter
-    def clip_text(self, val: bool) -> None: self.__clip_text = val
+    def clip_text(self, val: bool) -> None: self._clip_text = val
     # endregion
 
     def render(self, surf: Surface) -> None:
         super().render(surf)
-        txt_surf = self.__font.render(self.text, True, (0, 0, 0))
-        if self.__clip_text:
+        txt_surf = self._font.render(self.text, True, (0, 0, 0))
+        if self._clip_text:
             txt_r = txt_surf.get_rect()
             clip_r = Rect(0, 0, min(self.rect.w, txt_r.w), min(self.rect.h, txt_r.h))
             txt_surf = txt_surf.subsurface(clip_r)
