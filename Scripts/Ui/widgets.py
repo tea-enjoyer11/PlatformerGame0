@@ -88,6 +88,7 @@ class _Manager:
 
         for widget in self.widgets:
             # region Hoverlogic (vllt nicht allzu schön geschrieben)
+            # hover states: 0: nix, 1: enter, 2: hover, 3: exit
             if widget == self.topmost_widget:
                 if widget._hover_state == 0:
                     widget._hover_state = 1
