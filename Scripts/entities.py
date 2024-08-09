@@ -2,6 +2,7 @@ from Scripts.CONFIG import *
 from Scripts.tiles import *
 from Scripts.sprites import Animation, cut_spritesheet_row, cut_from_spritesheet
 from Scripts.timer import Timer
+from typing import List
 
 
 class PhysicsEntity:
@@ -56,10 +57,11 @@ class Player(PhysicsEntity):
 
         self.last_movement_dir = [0, 0]
 
-    def _handle_standart_colls(self, movement, dt: float, normal_tiles: list[Tile]) -> None:
+    def _handle_standart_colls(self, movement, dt: float, normal_tiles: List[Tile]) -> None:
         self.pos[0] += movement[0] * dt
         self.rect.x = int(self.pos[0])
         tile_hit_list = collision_test(self.rect, normal_tiles)
+        # print(1, tile_hit_list)
         for t in tile_hit_list:
             if movement[0] > 0:
                 self.rect.right = t.left
@@ -75,6 +77,7 @@ class Player(PhysicsEntity):
         self.pos[1] += movement[1] * dt
         self.rect.y = int(self.pos[1])
         tile_hit_list = collision_test(self.rect, normal_tiles)
+        # print(2, tile_hit_list)
         for t in tile_hit_list:
             if movement[1] > 0:
                 self.rect.bottom = t.top
@@ -84,7 +87,7 @@ class Player(PhysicsEntity):
                 self._collision_types['top'] = True
             self.pos[1] = self.rect.y
 
-    def _handle_ramps_colls(self, movement, dt: float, ramps: list[Ramp]) -> None:
+    def _handle_ramps_colls(self, movement, dt: float, ramps: List[Ramp]) -> None:
         for ramp in ramps:
             hitbox = tile_rect(ramp)
             ramp_collision = self.rect.colliderect(hitbox)
@@ -138,7 +141,7 @@ class Player(PhysicsEntity):
 
                     self._collision_types['bottom'] = True
 
-    def _handle_custom_ramps_colls(self, movement, dt: float, ramps: list[CustomRamp]) -> None:
+    def _handle_custom_ramps_colls(self, movement, dt: float, ramps: List[CustomRamp]) -> None:
         for ramp in ramps:
             hitbox = tile_rect(ramp)
             ramp_collision = self.rect.colliderect(hitbox)
@@ -179,7 +182,7 @@ class Player(PhysicsEntity):
                         self.pos[1] = self.rect.y
                         self._collision_types['bottom'] = True
 
-    def _handle_custom_tiles_colls(self, movement, dt: float, custom_tiles: list[CustomTile]) -> None:
+    def _handle_custom_tiles_colls(self, movement, dt: float, custom_tiles: List[CustomTile]) -> None:
         for c_tile in custom_tiles:
             hitbox = tile_rect(c_tile)
             tile_collision = self.rect.colliderect(hitbox)
@@ -220,7 +223,7 @@ class Player(PhysicsEntity):
                         self.pos[1] = self.rect.y
                         self._collision_types['bottom'] = True
 
-    def move(self, movement: Sequence[float], tiles: list[Tile], dt: float, noclip: bool = False):
+    def move(self, movement: Sequence[float], tiles: List[Tile], dt: float, noclip: bool = False):
         if movement[0] != 0:
             self.last_movement_dir[0] = movement[0]
         if movement[1] != 0:
@@ -239,15 +242,15 @@ class Player(PhysicsEntity):
             return self._collision_types.copy()
 
         normal_tiles = [tile_rect(t) for t in tiles if t.type == TileType.TILE]
-        ramps: list[Ramp] = [t for t in tiles if t.type in [TileType.RAMP_LEFT, TileType.RAMP_RIGHT]]
-        custom_ramps: list[CustomRamp] = [t for t in tiles if t.type is TileType.RAMP_CUSTOM]
-        custom_tiles: list[CustomTile] = [t for t in tiles if t.type is TileType.TILE_CUSTOM]
+        ramps: List[Ramp] = [t for t in tiles if t.type in [TileType.RAMP_LEFT, TileType.RAMP_RIGHT]]
+        custom_ramps: List[CustomRamp] = [t for t in tiles if t.type is TileType.RAMP_CUSTOM]
+        custom_tiles: List[CustomTile] = [t for t in tiles if t.type is TileType.TILE_CUSTOM]
 
         # handle collisions
         self._handle_standart_colls(movement, dt, normal_tiles)
-        self._handle_ramps_colls(movement, dt, ramps)
-        self._handle_custom_ramps_colls(movement, dt, custom_ramps)
-        self._handle_custom_tiles_colls(movement, dt, custom_tiles)
+        # self._handle_ramps_colls(movement, dt, ramps)
+        # self._handle_custom_ramps_colls(movement, dt, custom_ramps)
+        # self._handle_custom_tiles_colls(movement, dt, custom_tiles)
 
         # ! TODO bugs fixen!
         # ! 1. wenn man auf einer geraden linie läuft und springt, wird man beim laden zurück gebuggt.

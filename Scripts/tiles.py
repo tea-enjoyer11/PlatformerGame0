@@ -2,14 +2,14 @@ from copy import deepcopy
 from itertools import chain
 import os
 from Scripts.CONFIG import *
-from typing import Literal, Any
+from typing import Literal, Any, List, Dict, Tuple, List
 import math
 from Scripts.utils_math import clamp_number_to_range_steps
 
 
 class Queue:
     def __init__(self) -> None:
-        self._content: list[object] = []
+        self._content: List[object] = []
 
     def empty(self) -> bool:  # True if empty
         return bool(len(self._content))
@@ -128,8 +128,8 @@ class CustomRamp(Tile):
         self.size = Vector2(hitbox.get_size())
 
     @staticmethod
-    def parse_data(hitbox: Surface) -> dict[int, int]:
-        ret: dict[int, int] = {}
+    def parse_data(hitbox: Surface) -> Dict[int, int]:
+        ret: Dict[int, int] = {}
         # ret ist ein dict wo, die x position als key
         # und die höhe der ramp an der x position als value gespeichert wird
         # Bsp: {1: 2, 2: 3, 3: 5, ...}
@@ -158,9 +158,9 @@ class CustomRamp(Tile):
 
 
 class GrassBlade(Tile):  # representiert nur einen grashalm
-    img_cache: dict[str, Surface] = {}
-    offset_cache: dict[str, Vector2] = {}
-    img_half_size_cache: dict[str, tuple] = {}
+    img_cache: Dict[str, Surface] = {}
+    offset_cache: Dict[str, Vector2] = {}
+    img_half_size_cache: Dict[str, Tuple] = {}
     def rot_function(x) -> float: return 35 * math.sin(0.5 * x)
     max_rotations = 20
     rotation_angle = 35
@@ -210,9 +210,9 @@ class Chunk:
         self.parent = parent
         self.pos = Vector2(pos)
         self.size = size
-        self._tiles: dict[tuple, Tile] = {}
-        self._tiles_offgrid: dict[tuple, Tile] = {}
-        self._ghost_tiles: dict[tuple, Tile] = {}
+        self._tiles: Dict[Tuple, Tile] = {}
+        self._tiles_offgrid: Dict[Tuple, Tile] = {}
+        self._ghost_tiles: Dict[Tuple, Tile] = {}
 
         self._pre_renderd_surf: Surface = None
         self._pre_renderd_surf_size: Vector2 = None
@@ -223,19 +223,19 @@ class Chunk:
     def copy(self) -> "Chunk":
         return deepcopy(self)
 
-    def get(self, pos: tuple) -> Tile | None:
+    def get(self, pos: Tuple) -> Tile | None:
         if pos in self._tiles:
             return self._tiles[pos]
         return None
 
-    def get_all(self) -> list[Tile]:
+    def get_all(self) -> List[Tile]:
         return list(self._tiles.values())
 
-    def get_all_offgrid(self) -> list[Tile]:
+    def get_all_offgrid(self) -> List[Tile]:
         return list(self._tiles_offgrid.values())
 
-    def get_around(self, pos: Vector2, size: Vector2 | None = None) -> list[Tile | Ramp]:
-        ret: list[Tile | Ramp] = []
+    def get_around(self, pos: Vector2, size: Vector2 | None = None) -> List[Tile | Ramp]:
+        ret: List[Tile | Ramp] = []
 
         x, y = pos.x // TILESIZE, pos.y // TILESIZE
         x, y = x % CHUNKSIZE, y % CHUNKSIZE
@@ -331,7 +331,7 @@ class Chunk:
             self._pre_render_data = self._calc_pre_render_data()
         return ret
 
-    def extend(self, tiles: list[Tile]) -> None:
+    def extend(self, tiles: List[Tile]) -> None:
         self._last_pre_render_data = self._calc_pre_render_data()
         for tile in tiles:
             pos = tuple(tile.pos)
@@ -339,13 +339,11 @@ class Chunk:
             self._tiles[pos] = tile
         self._pre_render_data = self._calc_pre_render_data()
 
-    def _calc_pre_render_data(self) -> list[Iterable]:
+    def _calc_pre_render_data(self) -> List[Iterable]:
         return list(chain(self._tiles.items(), self._ghost_tiles.items()))
 
     def pre_render_needed(self) -> bool:
-        h1 = hash(self._last_pre_render_data)
-        h2 = hash(self._pre_render_data)
-        return not h1 == h2
+        return not hash(self._last_pre_render_data) == hash(self._pre_render_data)
 
     def add_ghost_tile(self, tile: Tile, pos: Vector2, raw_pos: bool = False):
         pos_ = None
@@ -359,7 +357,7 @@ class Chunk:
     def _tile_is_on_edge(self, tile: Tile | Ramp) -> bool:
         """
         returns:
-            list[bool]: [on_top_edge, on_right_edge, on_bottom_edge, on_left_edge]
+            List[bool]: [on_top_edge, on_right_edge, on_bottom_edge, on_left_edge]
         """
         x, y = tile.pos.x % CHUNKSIZE, tile.pos.y % CHUNKSIZE
         additional_w, additional_h = tuple(Vector2(tile_rect(tile).size) // TILESIZE - Vector2(1))
@@ -388,11 +386,11 @@ class Chunk:
         l = []
         global_tile_offset = Vector2(0)
 
-        ramps: list[Ramp] = []
-        custom_ramps: list[CustomRamp] = []
-        tiles: list[Tile] = []
-        custom_tiles: list[CustomTile] = []
-        grass_blades: list[GrassBlade] = []
+        ramps: List[Ramp] = []
+        custom_ramps: List[CustomRamp] = []
+        tiles: List[Tile] = []
+        custom_tiles: List[CustomTile] = []
+        grass_blades: List[GrassBlade] = []
 
         for _, tile in self._tiles.items():
             if tile.type in [TileType.RAMP_LEFT, TileType.RAMP_RIGHT]:
@@ -479,7 +477,7 @@ class Chunk:
         return (self._pre_renderd_surf, global_pos - self.pre_render_offset)
 
 
-def on_edge_of_chunk(pos: Vector2) -> list[bool]:
+def on_edge_of_chunk(pos: Vector2) -> List[bool]:
     """_summary_
     No need to convert `pos` to a 'Chunk' position. This method does this automatically!
 
@@ -487,7 +485,7 @@ def on_edge_of_chunk(pos: Vector2) -> list[bool]:
         pos (Vector2): position to check
 
     Returns:
-        list[bool]: [on_top_edge, on_right_edge, on_bottom_edge, on_left_edge]
+        List[bool]: [on_top_edge, on_right_edge, on_bottom_edge, on_left_edge]
     """
     x, y = pos.x / TILESIZE % CHUNKSIZE, pos.y / TILESIZE % CHUNKSIZE
     # x, y = int(x), int(y)
@@ -513,10 +511,10 @@ class TileMap:
                  "amount_of_chunks", "culling_offset", "_pre_render_queue")
 
     def __init__(self, chunk_size=(CHUNKSIZE, CHUNKSIZE)) -> None:
-        # self._tiles: dict[tuple, Tile] = {}
-        self._chunks: dict[tuple, Chunk] = {}
+        # self._tiles: Dict[Tuple, Tile] = {}
+        self._chunks: Dict[Tuple, Chunk] = {}
 
-        self.chunk_size: tuple[int, int] = chunk_size
+        self.chunk_size: Tuple[int, int] = chunk_size
 
         self.amount_of_tiles = 0
         self.amount_of_tiles_offgrid = 0
@@ -598,7 +596,7 @@ class TileMap:
             self.amount_of_tiles_offgrid += 1
         self.add_to_pre_render_queue(chunk)
 
-    def extend(self, tiles: list[Tile]) -> None:
+    def extend(self, tiles: List[Tile]) -> None:
         for tile in tiles:
             # self._tiles[tuple(tile.pos)] = tile
 
@@ -614,7 +612,7 @@ class TileMap:
                 self.amount_of_tiles += 1
                 self.add_to_pre_render_queue(chunk)
 
-    def get(self, pos: tuple) -> Tile:
+    def get(self, pos: Tuple) -> Tile:
         if not isinstance(pos, tuple):
             try:
                 pos = tuple(pos)
@@ -624,19 +622,19 @@ class TileMap:
         if pos in self._tiles:
             return self._tiles[pos]
 
-    def get_chunk(self, pos: tuple) -> Chunk | None:
+    def get_chunk(self, pos: Tuple) -> Chunk | None:
         if pos in self._chunks:
             return self._chunks[pos]
         return None
 
-    def _create_empty_chunk(self, pos: tuple) -> Chunk | None:
+    def _create_empty_chunk(self, pos: Tuple) -> Chunk | None:
         if pos not in self._chunks:
             c = Chunk(self, pos, self.chunk_size)
             self._chunks[pos] = c
             return c
         return None
 
-    def get_around(self, pos: Vector2) -> list[Tile]:
+    def get_around(self, pos: Vector2) -> List[Tile]:
         related_chunk_pos = Vector2(pos.x // TILESIZE // self.chunk_size[0], pos.y // TILESIZE // self.chunk_size[1])
         # print("related chunk position:", related_chunk_pos, pos)
         ret = []
@@ -659,13 +657,13 @@ class TileMap:
 
         return ret
 
-    def get_all(self) -> list[Tile]:
+    def get_all(self) -> List[Tile]:
         r = []
         for _, chunk in self._chunks.items():
             r += chunk.get_all()
         return r
 
-    def get_all_offgrid(self) -> list[Tile]:
+    def get_all_offgrid(self) -> List[Tile]:
         r = []
         for _, chunk in self._chunks.items():
             rr = chunk.get_all_offgrid()
@@ -711,7 +709,7 @@ class TileMap:
     @ staticmethod
     def deserialize(directory: str) -> "TileMap":
         # load ...
-        chunks: dict[tuple, Chunk] = {}
+        chunks: Dict[Tuple, Chunk] = {}
         tilemap = TileMap()
 
         files = [f for f in os.listdir(directory) if f.endswith(".data")]
@@ -738,7 +736,7 @@ class TileMap:
         return tilemap
 
 
-def collision_test(object_1: Rect, object_list: list[Rect]) -> list[Rect]:
+def collision_test(object_1: Rect, object_list: List[Rect]) -> List[Rect]:
     collision_list = []
     for obj in object_list:
         if obj.colliderect(object_1):

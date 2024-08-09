@@ -5,6 +5,7 @@ import os
 import pickle
 import gzip
 import random
+from typing import List, Tuple, Literal
 
 BASE_SOUND_PATH = ""
 
@@ -83,8 +84,9 @@ def draw_text(screen: pygame.Surface, text: str, pos: tuple, font: pygame.Font =
         screen.blit(textsurface, pos)
 
 
-def hide_mouse(): pygame.mouse.set_visible(False)
-def show_mouse(): pygame.mouse.set_visible(True)
+def hide_mouse() -> None: pygame.mouse.set_visible(False)
+def show_mouse() -> None: pygame.mouse.set_visible(True)
+def set_mouse_visibility(val: bool) -> None: pygame.mouse.set_visible(val)
 
 
 def make_surface(size: tuple, color: tuple = None, color_key: tuple = None) -> pygame.Surface:
@@ -109,7 +111,7 @@ def loadSounds(path):
     return sounds
 
 
-def combineImages(images: list[Surface], pathToOverLayImage: str):
+def combineImages(images: List[Surface], pathToOverLayImage: str):
     overLayImage = load_image(pathToOverLayImage).convert_alpha()
     newImages = []
     for img in images:
@@ -120,7 +122,7 @@ def combineImages(images: list[Surface], pathToOverLayImage: str):
     return newImages
 
 
-def recolorImages(imgList: Surface, oldColor: Color, newColor: Color, blackKey: bool = False) -> list[Surface]:
+def recolorImages(imgList: Surface, oldColor: Color, newColor: Color, blackKey: bool = False) -> List[Surface]:
     """Only recolors one color at a time! removes any previous .set_colorkey() calls"""
     recoloredImages = []
     for img in imgList:
@@ -163,6 +165,21 @@ def recolorSurface(img: Surface, newColor: Color) -> Surface:
     return img_copy
 
 
+def palette_sawp(image: Surface, org_pallet: List[Color], new_pallet: List[Color]) -> Surface:
+    """
+    Swapes color `n` from `org_pallet` with color `m` from `new_pallet`.
+    """
+    ret = image.copy()
+    for o_color, n_color in zip(org_pallet, new_pallet):
+        ret_copy = ret.copy()
+        ret_copy.fill(n_color)
+        ret.set_colorkey(o_color)
+        ret_copy.blit(ret, (0, 0))
+        ret_copy.set_colorkey((0, 0, 0))
+        ret = ret_copy
+    return ret
+
+
 def circle_surf(radius: float, color: Color) -> Surface:
     surf = pygame.Surface((radius * 2, radius * 2))
     pygame.draw.circle(surf, color, (radius, radius), radius)
@@ -191,3 +208,13 @@ def surf_is_black(surf: Surface) -> bool:
     pixel_array = pygame.surfarray.array3d(surf)
     surf.unlock()
     return np.all(pixel_array == 0)
+
+
+def hex_to_rgb(hex_color: str) -> Tuple:
+    hex_color = hex_color.lstrip('#')  # Remove the hash symbol if present
+    return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+
+
+def hex_to_rgba(hex_color: str, alpha: Literal[0, 255]) -> Tuple:
+    hex_color = hex_color.lstrip('#')  # Remove the hash symbol if present
+    return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4)) + (alpha,)

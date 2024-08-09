@@ -30,7 +30,7 @@ speed = 200
 dt_multiplicator = 1
 gravity = 2500
 max_gravity = 1000
-jumpforce = 700
+jumpforce = 470
 noclip = False
 scroll = Vector2(0)
 pygame_gui_manager = pygame_gui.ui_manager.UIManager((800, 600))
@@ -143,7 +143,7 @@ while run:
     for tile in close_tiles:
         render_collision_mesh(screen, "yellow", tile, offset=scroll)
 
-    # region Buttons ------------------------------------------------ #
+    # region Events
     for event in pygame.event.get():
         if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
             run = False
@@ -232,7 +232,7 @@ while run:
         # endregion
 
         pygame_gui_manager.process_events(event)
-    # endreion
+    # endregion
 
     m_pos = tuple(pygame.Vector2(pygame.mouse.get_pos()))
     if pygame.mouse.get_pressed()[0]:
@@ -244,7 +244,6 @@ while run:
     particle_group.draw(screen, blend=pygame.BLEND_RGB_ADD)
 
     pygame_gui_manager.update(dt)
-    pygame_gui_manager.draw_ui(screen)
 
     master_screen.blit(pygame.transform.scale(screen, RES), (0, 0))
 
@@ -258,6 +257,8 @@ while run:
     draw_text(master_screen, f"{collisions}", (0, 0), font=font, outline_color=outline_color)
     draw_text(master_screen, f"{p._last_collision_types}", (0, 20), outline_color=outline_color)
     draw_text(master_screen, f"Are the last and current collisions the same: {collisions == p._last_collision_types}", (0, 40), outline_color=outline_color)
+
+    pygame_gui_manager.draw_ui(master_screen)
 
     pygame.display.flip()
 

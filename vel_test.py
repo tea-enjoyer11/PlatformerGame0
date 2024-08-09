@@ -1,66 +1,100 @@
 import pygame
+import sys
 
-from Scripts.utils import draw_text
-
+# Initialize Pygame
 pygame.init()
-display = pygame.display.set_mode((640, 480))
+pygame.font.init()
+
+# Constants
+SCREEN_WIDTH = 800
+SCREEN_HEIGHT = 600
+PLAYER_SIZE = 50
+ACCELERATION = 50
+FRICTION = -0.2
+MAX_SPEED = 5000
+
+# Colors
+WHITE = (255, 255, 255)
+BLUE = (0, 0, 255)
+
+# Screen setup
+screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+
+# Player properties
+player_pos = pygame.Vector2(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
+player_velocity = pygame.Vector2(0, 0)
+player_acceleration = pygame.Vector2(0, 0)
+
+# Clock for framerate independence
 clock = pygame.time.Clock()
-GRAY = pygame.Color('gray12')
-display_width, display_height = display.get_size()
 
-x = display_width * 0.45
-y = display_height * 0.8
-
-x_change = 0
-y_change = 0
-accel_x = 0
-accel_y = 0
-max_speed = 6
+font = pygame.font.SysFont("arial", 18)
 
 
-def sign(a): return (a > 0) - (a < 0)
-
-
-crashed = False
-FRICTION = 0.01
-while not crashed:
-    dt = clock.tick(60) * 0.001
-
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
-            crashed = True
-
+def handle_input():
     keys = pygame.key.get_pressed()
-
-    # handle left and right movement
-    if keys[pygame.K_a] and not keys[pygame.K_d]:
-        x_change = max(x_change - 1 * dt, -max_speed)
-    elif keys[pygame.K_d] and not keys[pygame.K_a]:
-        x_change = min(x_change + 1 * dt, max_speed)
+    if keys[pygame.K_LEFT]:
+        player_acceleration.x = -ACCELERATION
+    elif keys[pygame.K_RIGHT]:
+        player_acceleration.x = ACCELERATION
     else:
-        x_change -= x_change * (1 - FRICTION) * dt
+        player_acceleration.x = 0
 
-    # handle up and down movement
-    if keys[pygame.K_w] and not keys[pygame.K_s]:
-        y_change = max(y_change - 1 * dt, -max_speed)
-    elif keys[pygame.K_s] and not keys[pygame.K_w]:
-        y_change = min(y_change + 1 * dt, max_speed)
+    if keys[pygame.K_UP]:
+        player_acceleration.y = -ACCELERATION
+    elif keys[pygame.K_DOWN]:
+        player_acceleration.y = ACCELERATION
     else:
-        y_change -= y_change * (1 - FRICTION) * dt
+        player_acceleration.y = 0
 
-    x += x_change  # Move the object.
-    y += y_change
 
-    if keys[pygame.K_r]:
-        x_change = 0
-        y_change = 0
-        x = display_width * 0.45
-        y = display_height * 0.8
+def update(dt):
+    global player_velocity, player_pos
 
-    display.fill(GRAY)
-    pygame.draw.rect(display, (0, 120, 250), (x, y, 20, 40))
+    # Apply acceleration
+    player_velocity += player_acceleration
 
-    draw_text(display, f"FPS: {clock.get_fps():.2f} DT: {dt}", (10, 10))
-    draw_text(display, f"VEL: {x_change:.2f}, {y_change:.2f} FRICTION: {(1 - FRICTION) * dt}", (10, 30))
+    # Apply friction
+    player_velocity += player_velocity * FRICTION
 
-    pygame.display.update()
+    if 0 < player_velocity.x < 0.1 or -0.1 < player_velocity.x < 0:
+        player_velocity.x = 0
+    if 0 < player_velocity.y < 0.1 or -0.1 < player_velocity.y < 0:
+        player_velocity.y = 0
+
+    # Cap the speed
+    if player_velocity.length() > MAX_SPEED:
+        player_velocity.scale_to_length(MAX_SPEED)
+
+    # Update player position
+    player_pos += player_velocity * dt
+
+    # Keep the player on screen
+    player_pos.x = max(0, min(SCREEN_WIDTH - PLAYER_SIZE, player_pos.x))
+    player_pos.y = max(0, min(SCREEN_HEIGHT - PLAYER_SIZE, player_pos.y))
+
+
+def draw():
+    screen.fill(WHITE)
+    pygame.draw.rect(screen, BLUE, (*player_pos, PLAYER_SIZE, PLAYER_SIZE))
+    screen.blit(font.render(f"{clock.get_fps()}", True, (0, 0, 0)), (0, 0))
+    screen.blit(font.render(f"{player_velocity}", True, (0, 0, 0)), (0, 25))
+    pygame.display.flip()
+
+
+def main():
+    while True:
+        dt = clock.tick(30) / 1000  # Convert to seconds
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
+                pygame.quit()
+                sys.exit()
+
+        handle_input()
+        update(dt)
+        draw()
+
+
+if __name__ == '__main__':
+    main()

@@ -32,7 +32,7 @@ def load() -> TileMap:
     return TileMap.deserialize("saves/t1")
 
 
-def save(do_backup: bool = False):
+def save(tilemap, do_backup: bool = False):
     if do_backup:
         backup()
     for file in os.scandir(f"saves/t1"):
@@ -147,7 +147,7 @@ class LevelEditor:
             if event.key == pygame.K_t:
                 self.tool = (self.tool + 1) % len(self.tools)
             if event.key == pygame.K_o:
-                save()
+                save(self.tilemap)
             if event.key == pygame.K_i:
                 self.tilemap = load()
             if event.key == pygame.K_u:
@@ -207,7 +207,7 @@ class LevelEditor:
             if self.mPos.x < left_menu_offset:  # menu
                 p = self.mPos // (TILESIZE + tile_displaying_offset)
                 if p.y < len(self.tiles) and p.x < len(self.tiles[0]):
-                    selected_tile = (
+                    self.selected_tile = (
                         clamp(0, int(p.y), len(self.tiles) - 1),
                         clamp(0, int(p.x), len(self.tiles[0]) - 1)
                     )
