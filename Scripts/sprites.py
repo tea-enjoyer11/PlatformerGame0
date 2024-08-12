@@ -115,4 +115,4 @@ class Animation:
         return self.states[self.__state][int(self.index)]
 
     def new_img(self) -> bool:
-        return self.__last_img == self.img()
+        return self.__last_img != self.img()
