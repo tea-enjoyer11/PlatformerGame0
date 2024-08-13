@@ -6,13 +6,13 @@ import pygame
 
 from Scripts.tiles import *
 from Scripts.CONFIG import *
-from Scripts.utils import load_image, draw_text, random_color
+from Scripts.utils import load_image, draw_text, random_color, make_surface
 from Scripts.particles import ParticleGroup, ImageCache, CircleParticle, LeafParticle
-from Scripts.entities import Player
 from Scripts.timer import TimerManager
 
-
-p = Player(Vector2(200, 500))
+from Scripts.entities import Transform, Image, ImageRenderer, Velocity, PhysicsMovementSystem, CollisionResolver
+import Scripts.Ecs as Ecs
+# p = Player(Vector2(200, 500))
 
 # loading grass blade images
 for f in os.listdir("assets/tiles/grass_blades"):
@@ -28,10 +28,10 @@ down = False
 boost = False
 speed = 200
 dt_multiplicator = 1
-gravity = 2500
+gravity = 100
 max_gravity = 1000
 jumpforce = 470
-noclip = False
+noclip = True
 scroll = Vector2(0)
 pygame_gui_manager = pygame_gui.ui_manager.UIManager((800, 600))
 tile_map = TileMap()
@@ -42,6 +42,21 @@ global_time = 0
 img_cache = ImageCache(load_image)
 particle_group = ParticleGroup(img_cache)
 
+component_manager = Ecs.ComponentManager()
+entity_manager = Ecs.EntityManager(component_manager)
+system_manager = Ecs.SystemManager(entity_manager, component_manager)
+
+p = entity_manager.add_entity()
+component_manager.add_component(p, [
+    Transform(200, 30, 8, 16),
+    Image(make_surface((8, 16), color=(255, 255, 125))),
+    Velocity(1, 1)])
+renderer_sys = ImageRenderer(screen)
+movement_sys = PhysicsMovementSystem()
+collision_resolver_sys = CollisionResolver()
+system_manager.add_system(p, renderer_sys)
+system_manager.add_system(p, movement_sys)
+system_manager.add_system(p, collision_resolver_sys)
 
 # grass_blades = []
 # # testing grass blades
@@ -98,50 +113,57 @@ while run:
     tile_map.pre_render_chunks()  # TODO besseren weg finden alle grass blades zu updated ohne ALLE chunks zu prerendern
 
     # self.scroll += ((self.player.pos - Vector2(4, 4)) - RES / 4 / 2 - self.scroll) / 30
-    scroll += ((p.pos - Vector2(TILESIZE / 2)) - DOWNSCALED_RES / 2 - scroll) / 30
+    # scroll += ((p.pos - Vector2(TILESIZE / 2)) - DOWNSCALED_RES / 2 - scroll) / 30
+    scroll += ((component_manager.get_component(p, Transform).pos - Vector2(TILESIZE / 2)) - DOWNSCALED_RES / 2 - scroll) / 30
 
     # Background --------------------------------------------- #
     screen.fill((0, 0, 0))
 
     # Player ------------------------------------------------- #
     if not noclip:
-        p.vel.y += gravity * dt
-        p.vel.y = min(p.vel.y, max_gravity)
-        # player_movement = [0, p.vel.y]
-        player_movement[1] = p.vel.y
+        vel = component_manager.get_component(p, Velocity)
+        vel.y += gravity * dt
+        vel.y = min(vel.y, max_gravity)
+        # player_movement = [0, vel.y]
+        player_movement[1] = vel.y
+        player_movement[0] = 0
+    if right:
+        player_movement[0] = speed
+    elif left:
+        player_movement[0] = -speed
+    else:
         player_movement[0] = 0
     if noclip:
-        player_movement = [0, 0]
-
-    if right:
-        player_movement[0] += speed
-    if left:
-        player_movement[0] -= speed
-    if noclip:
+        player_movement[1] = 0
         if up:
-            player_movement[1] -= speed
+            player_movement[1] = -speed
         if down:
-            player_movement[1] += speed
+            player_movement[1] = speed
 
     if boost:
         player_movement[0] *= 4
         player_movement[1] *= 4
 
-    close_tiles = tile_map.get_around(p.pos)
-    collisions = p.move(player_movement, close_tiles, dt, noclip)
-    if (collisions['bottom']) or (collisions['top']) and not noclip:
-        p.vel.y = 0
+    # close_tiles = tile_map.get_around(p.pos)
+    # collisions = p.move(player_movement, close_tiles, dt, noclip)
+    # if (collisions['bottom']) or (collisions['top']) and not noclip:
+    #     p.vel.y = 0
 
     timermanager.update()
-    p.update(dt)
+    # p.update(dt)
 
-    tile_map.render(screen, p.pos, offset=scroll)
-    pygame.draw.rect(screen, "blue", Rect(Vector2(p.rect.topleft) - scroll, p.rect.size))
+    tile_map.render(screen, component_manager.get_component(p, Transform).pos, offset=scroll)
+    # pygame.draw.rect(screen, "blue", Rect(Vector2(component_manager.get_component(p, Transform).rect.topleft) - scroll, component_manager.get_component(p, Transform).rect.size))
+    system_args = {"scroll": scroll, "movement": player_movement, "dt": dt, "tilemap": tile_map, "noclip": noclip, "gravity": gravity, "max_gravity": max_gravity}
+    # system_manager.run_all_systems(**system_args)
+    system_manager.run_base_system(collision_resolver_sys, **system_args)
+    system_manager.run_base_system(movement_sys, **system_args)
+    system_manager.run_base_system(renderer_sys, **system_args)
 
-    p.render(screen, scroll)
+    # p.render(screen, scroll)
 
-    for tile in close_tiles:
-        render_collision_mesh(screen, "yellow", tile, offset=scroll)
+    # for tile in close_tiles:
+    #     render_collision_mesh(screen, "yellow", tile, offset=scroll)
 
     # region Events
     for event in pygame.event.get():
@@ -161,7 +183,7 @@ while run:
                 p.set_state("jump_init")
             if event.key == pygame.K_TAB:
                 noclip = not noclip
-                p.vel.y = 0
+                # p.vel.y = 0
             if event.key == pygame.K_UP:
                 dt_multiplicator = min(5, dt_multiplicator + 0.25)
             if event.key == pygame.K_DOWN:
@@ -248,15 +270,16 @@ while run:
     master_screen.blit(pygame.transform.scale(screen, RES), (0, 0))
 
     outline_color = None
+    p_transform = component_manager.get_component(p, Transform)
     draw_text(master_screen, f"DT: {dt:.6f} DT multiplier:{dt_multiplicator:.4f}", (0, 80), outline_color=outline_color)
     draw_text(master_screen, f"{mainClock.get_fps():.0f}", (500, 0), outline_color=outline_color)
     draw_text(master_screen, f"{player_movement[0]:.2f}, {player_movement[1]:.2f}", (0, 200), outline_color=outline_color)
-    draw_text(master_screen, f"TILEPOS: {p.pos // TILESIZE}\nPOS:{p.pos}\nNOCLIP: {noclip}", (500, 50), outline_color=outline_color)
+    draw_text(master_screen, f"TILEPOS: {p_transform.pos // TILESIZE}\nPOS:{p_transform.pos}\nNOCLIP: {noclip}", (500, 50), outline_color=outline_color)
     draw_text(master_screen, f"TILEMAP:\nAmount of Chunks: {len(tile_map._chunks)}\nAmount of Tiles: {tile_map.amount_of_tiles}", (500, 150), outline_color=outline_color)
     draw_text(master_screen, f"PARTICLES:\nAmount of Particles: {len(particle_group)}", (500, 250), outline_color=outline_color)
-    draw_text(master_screen, f"{collisions}", (0, 0), font=font, outline_color=outline_color)
-    draw_text(master_screen, f"{p._last_collision_types}", (0, 20), outline_color=outline_color)
-    draw_text(master_screen, f"Are the last and current collisions the same: {collisions == p._last_collision_types}", (0, 40), outline_color=outline_color)
+    # draw_text(master_screen, f"{collisions}", (0, 0), font=font, outline_color=outline_color)
+    # draw_text(master_screen, f"{p._last_collision_types}", (0, 20), outline_color=outline_color)
+    # draw_text(master_screen, f"Are the last and current collisions the same: {collisions == p._last_collision_types}", (0, 40), outline_color=outline_color)
 
     pygame_gui_manager.draw_ui(master_screen)
 

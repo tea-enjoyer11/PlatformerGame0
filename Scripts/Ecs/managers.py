@@ -77,16 +77,25 @@ class ComponentManager:
             ret[t] = self._components[t][entity]
         return ret
 
+    def get_component(self, entity: Entity, component_type: typing.Type[BaseComponent]) -> BaseComponent:
+        try:
+            return self._components[component_type][entity]
+        except KeyError:
+            raise KeyError(f"Entity: {entity} does not have component type: {component_type}")
+
 
 class SystemManager:
     __slots__ = ("entity_manager", "component_manager",
-                 "_systems", "_systems_extended")
+                 "_systems", "_extended_systems",
+                 "_systems_ran_already", "_extended_systems_ran_already")
 
     def __init__(self, entity_manager: EntityManager, component_manager: ComponentManager) -> None:
         self.entity_manager = entity_manager
         self.component_manager = component_manager
         self._systems: dict[BaseSystem, set[int]] = dict()
-        self._systems_extended: dict[ExtendedSystem, set[int]] = dict()
+        self._extended_systems: dict[ExtendedSystem, set[int]] = dict()
+        self._systems_ran_already: set[BaseComponent] = set()
+        self._extended_systems_ran_already: set[ExtendedSystem] = set()
 
     def add_system(self, entity: Entity, system: BaseSystem) -> None:
         if system not in self._systems:
@@ -94,26 +103,46 @@ class SystemManager:
         self._systems[system].add(hash(entity))
 
     def add_extended_system(self, entity: Entity, system: ExtendedSystem) -> None:
-        if system not in self._systems_extended:
-            self._systems_extended[system] = set()
-        self._systems_extended[system].add(hash(entity))
+        if system not in self._extended_systems:
+            self._extended_systems[system] = set()
+        self._extended_systems[system].add(hash(entity))
 
     def run_all_systems(self, /, **kwargs) -> None:
         # t0 = time.time()
 
         for base_system, entities in self._systems.items():
+            if base_system in self._systems_ran_already:
+                continue
             for entity in entities:
                 base_system.update_entity(self.entity_manager._entities[entity], self.component_manager.get_all_components(entity, base_system.required_component_types), **kwargs)  # type: ignore
 
         # t1 = time.time()
 
-        for ext_system, entities in self._systems_extended.items():
+        for ext_system, entities in self._extended_systems.items():
+            if ext_system in self._extended_systems_ran_already:
+                continue
             data = {self.entity_manager._entities[entity_]: self.component_manager.get_all_components(self.entity_manager._entities[entity_], ext_system.required_component_types) for entity_ in entities}
             ext_system.update_entities(data, **kwargs)
 
         # print(f"To run all systems it took: {time.time() - t0:.4f} seconds. (BaseSystem: {t1 - t0:.7f} sec. ExtendedSystem: {time.time() - t1:.7f})")
 
         self._remove_all_entities()
+        self._systems_ran_already.clear()
+        self._extended_systems_ran_already.clear()
+
+    def run_base_system(self, system: BaseSystem, **kwargs) -> None:
+        entities = self._systems[system]
+        for entity in entities:
+            system.update_entity(self.entity_manager._entities[entity], self.component_manager.get_all_components(entity, system.required_component_types), **kwargs)  # type: ignore
+
+        self._systems_ran_already.add(system)
+
+    def run_extended_system(self, system: ExtendedSystem, **kwargs) -> None:
+        entities = self._extended_systems[system]
+        data = {self.entity_manager._entities[e]: self.component_manager.get_all_components(self.entity_manager._entities[e], system.required_component_types) for e in entities}
+        system.update_entities(data, **kwargs)
+
+        self._extended_systems_ran_already.add(system)
 
     def _remove_all_entities(self) -> None:
         entities = self.entity_manager.final_remove()
@@ -127,7 +156,7 @@ class SystemManager:
             for base_system, ens in self._systems.items():
                 if en in ens:
                     to_remove["base"].add((base_system, en))
-            for ext_system, ens in self._systems_extended.items():
+            for ext_system, ens in self._extended_systems.items():
                 if en in ens:
                     to_remove["extended"].add((ext_system, en))
 
@@ -135,7 +164,7 @@ class SystemManager:
             self._systems[s].remove(e)
             self.component_manager.remove_entity(e)
         for (s, e) in to_remove["extended"]:
-            self._systems_extended[s].remove(e)
+            self._extended_systems[s].remove(e)
             self.component_manager.remove_entity(e)
 
         # print(f"To execute the final removal of entities it took: {time.time() - t0} seconds")

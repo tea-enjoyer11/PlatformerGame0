@@ -744,24 +744,24 @@ def collision_test(object_1: Rect, object_list: List[Rect]) -> List[Rect]:
     return collision_list
 
 
-def tile_rect(t: Tile | Ramp, offset: Vector2 = Vector2(0)) -> Rect:
+def tile_rect(t: Tile | Ramp, offset: Vector2 = Vector2(0)) -> FRect:
     if isinstance(t, CustomRamp):
         if t.size.y > TILESIZE:
             x = t.pos.x * TILESIZE - offset.x
             y = (t.pos.y * TILESIZE) + TILESIZE - t.size.y - offset.y
             w = TILESIZE
             h = t.size.y
-            return Rect(x, y, w, h)
+            return FRect(x, y, w, h)
         else:
-            return Rect(t.pos.x * TILESIZE - offset.x, t.pos.y * TILESIZE - offset.y, TILESIZE, TILESIZE)
+            return FRect(t.pos.x * TILESIZE - offset.x, t.pos.y * TILESIZE - offset.y, TILESIZE, TILESIZE)
     elif isinstance(t, Ramp):
         x = t.pos.x * TILESIZE - offset.x
         y = (t.pos.y * TILESIZE) + TILESIZE - (TILESIZE * t.elevation) - offset.y
         w = TILESIZE
         h = TILESIZE * t.elevation
-        return Rect(x, y, w, h)
+        return FRect(x, y, w, h)
     else:  # isinstance(t, Tile)
-        return Rect(t.pos.x * TILESIZE - offset.x, t.pos.y * TILESIZE - offset.y, TILESIZE, TILESIZE)
+        return FRect(t.pos.x * TILESIZE - offset.x, t.pos.y * TILESIZE - offset.y, TILESIZE, TILESIZE)
 
 
 def render_collision_mesh(surf: Surface, color: Color, t: Tile | Ramp, width: int = 1, offset: Vector2 = Vector2(0)) -> None:

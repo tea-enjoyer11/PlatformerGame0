@@ -89,12 +89,10 @@ def show_mouse() -> None: pygame.mouse.set_visible(True)
 def set_mouse_visibility(val: bool) -> None: pygame.mouse.set_visible(val)
 
 
-def make_surface(size: tuple, color: tuple = None, color_key: tuple = None) -> pygame.Surface:
+def make_surface(size: Tuple, color: Tuple = (0, 0, 0), color_key: Tuple = (0, 0, 0)) -> pygame.Surface:
     s = pygame.Surface(size)
-    if color:
-        s.fill(color)
-    if color_key:
-        s.set_colorkey(color)
+    s.fill(color)
+    s.set_colorkey(color_key)
     return s
 
 
