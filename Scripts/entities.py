@@ -52,23 +52,25 @@ class Transform(Ecs.BaseComponent):
     def pos(self) -> Vector2:
         return Vector2(self.x, self.y)
 
+    @pos.setter
+    def pos(self, pos: Vector2) -> None:
+        self.x = pos.x
+        self.y = pos.y
+
     @property
     def size(self) -> Tuple[int | float, int | float]:
         return self.w, self.h
+
+    @size.setter
+    def size(self, pos: Tuple) -> None:
+        self.w = pos[0]
+        self.h = pos[1]
 
 
 class Velocity(Ecs.BaseComponent, Vector2):
     def __init__(self, x: int | float, y: int | float) -> None:
         Vector2.__init__(self, x, y)
         Ecs.BaseComponent.__init__(self)
-    # def __init__(self, x: int | float, y: int | float) -> None:
-    #     super().__init__()
-    #     self.x = x
-    #     self.y = y
-    #     self.vec = pygame.Vector2(x, y)
-
-    # def __getattr__(self, name: str) -> Any:
-    #     return self.vec.__getattribute__(name)
 
 
 class Animation(Ecs.BaseComponent):
@@ -172,6 +174,8 @@ class CollisionResolver(Ecs.BaseSystem):
         noclip = kwargs["noclip"]
 
         if noclip:
+            transform.x += movement[0] * dt * velocity.x
+            transform.y += movement[1] * dt * velocity.y
             return
 
         collision_types = {"left": False, "right": False, "up": False, "bottom": False}
@@ -183,6 +187,7 @@ class CollisionResolver(Ecs.BaseSystem):
 
         tile_hit_list = collision_test(transform.frect, normal_tiles)
         # print(1, tile_hit_list)
+        transform.x += movement[0] * dt * velocity.x
         for t in tile_hit_list:
             r_copy = transform.frect
             if movement[1] > 0:
@@ -194,6 +199,7 @@ class CollisionResolver(Ecs.BaseSystem):
             transform.frect = r_copy
         tile_hit_list = collision_test(transform.frect, normal_tiles)
         # print(2, tile_hit_list)
+        transform.y += movement[1] * dt * velocity.y
         for t in tile_hit_list:
             r_copy = transform.frect
             if movement[0] > 0:
@@ -219,8 +225,8 @@ class PhysicsMovementSystem(Ecs.BaseSystem):
         movement = kwargs["movement"]
         dt = kwargs["dt"]
 
-        transform.x += movement[0] * dt * velocity.x
-        transform.y += movement[1] * dt * velocity.y
+        # transform.x += movement[0] * dt * velocity.x
+        # transform.y += movement[1] * dt * velocity.y
 
 
 # class PhysicsEntity:

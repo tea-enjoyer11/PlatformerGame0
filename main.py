@@ -3,6 +3,7 @@ import pygame_gui
 import pygame_gui.ui_manager
 import random
 import pygame
+import os
 
 from Scripts.tiles import *
 from Scripts.CONFIG import *
@@ -13,6 +14,8 @@ from Scripts.timer import TimerManager
 from Scripts.entities import Transform, Image, ImageRenderer, Velocity, PhysicsMovementSystem, CollisionResolver
 import Scripts.Ecs as Ecs
 # p = Player(Vector2(200, 500))
+
+os.environ['SDL_VIDEO_CENTERED'] = '1'
 
 # loading grass blade images
 for f in os.listdir("assets/tiles/grass_blades"):
@@ -28,7 +31,7 @@ down = False
 boost = False
 speed = 200
 dt_multiplicator = 1
-gravity = 100
+gravity = 2500
 max_gravity = 1000
 jumpforce = 470
 noclip = True
@@ -68,7 +71,7 @@ system_manager.add_system(p, collision_resolver_sys)
 # region Slider setup
 gravity_slider = pygame_gui.elements.UIHorizontalSlider(relative_rect=pygame.Rect(210, 500, 500, 30),
                                                         start_value=gravity,
-                                                        value_range=(100, 2500),
+                                                        value_range=(1, 2500),
                                                         manager=pygame_gui_manager)
 gravity_textbox = pygame_gui.elements.ui_text_entry_box.UITextEntryBox(pygame.Rect(110, 500, 90, 30),
                                                                        f"{gravity}",
@@ -78,7 +81,7 @@ gravity_lbl = pygame_gui.elements.ui_label.UILabel(pygame.Rect(10, 500, 90, 30),
                                                    pygame_gui_manager)
 max_gravity_slider = pygame_gui.elements.UIHorizontalSlider(relative_rect=pygame.Rect(210, 530, 500, 30),
                                                             start_value=max_gravity,
-                                                            value_range=(100, 2500),
+                                                            value_range=(1, 2500),
                                                             manager=pygame_gui_manager)
 max_gravity_lbl = pygame_gui.elements.ui_label.UILabel(pygame.Rect(10, 530, 90, 30),
                                                        "Max. Gravity",
@@ -88,7 +91,7 @@ max_gravity_textbox = pygame_gui.elements.ui_text_entry_box.UITextEntryBox(pygam
                                                                            manager=pygame_gui_manager)
 jumpforce_slider = pygame_gui.elements.UIHorizontalSlider(relative_rect=pygame.Rect(210, 560, 500, 30),
                                                           start_value=jumpforce,
-                                                          value_range=(100, 2500),
+                                                          value_range=(1, 2500),
                                                           manager=pygame_gui_manager)
 jumpforce_textbox = pygame_gui.elements.ui_text_entry_box.UITextEntryBox(pygame.Rect(110, 560, 90, 30),
                                                                          f"{jumpforce}",
@@ -120,25 +123,31 @@ while run:
     screen.fill((0, 0, 0))
 
     # Player ------------------------------------------------- #
+    p_velocity = component_manager.get_component(p, Velocity)
     if not noclip:
         vel = component_manager.get_component(p, Velocity)
         vel.y += gravity * dt
         vel.y = min(vel.y, max_gravity)
+        # print(vel.y, max_gravity)
         # player_movement = [0, vel.y]
         player_movement[1] = vel.y
         player_movement[0] = 0
     if right:
         player_movement[0] = speed
+        p_velocity.x = 1
     elif left:
-        player_movement[0] = -speed
+        player_movement[0] = speed
+        p_velocity.x = -1
     else:
         player_movement[0] = 0
     if noclip:
         player_movement[1] = 0
         if up:
-            player_movement[1] = -speed
+            player_movement[1] = speed
+            p_velocity.y = -1
         if down:
             player_movement[1] = speed
+            p_velocity.y = 1
 
     if boost:
         player_movement[0] *= 4
@@ -179,18 +188,23 @@ while run:
             if event.key == pygame.K_s:
                 down = True
             if event.key == pygame.K_SPACE:
-                p.vel.y = -jumpforce
-                p.set_state("jump_init")
+                p_velocity = component_manager.get_component(p, Velocity)
+                p_velocity.y = -jumpforce
+                # p.set_state("jump_init")
+                print(component_manager.get_component(p, Velocity).xy)
             if event.key == pygame.K_TAB:
                 noclip = not noclip
-                # p.vel.y = 0
+                p_velocity = component_manager.get_component(p, Velocity)
+                p_velocity.y = 0
             if event.key == pygame.K_UP:
                 dt_multiplicator = min(5, dt_multiplicator + 0.25)
             if event.key == pygame.K_DOWN:
                 dt_multiplicator = max(0, dt_multiplicator - 0.25)
             if event.key == pygame.K_r:
-                p.pos = Vector2(200, 50)
-                p.vel.y = 0
+                p_transform = component_manager.get_component(p, Transform)
+                p_transform.pos = Vector2(200, 50)
+                p_velocity = component_manager.get_component(p, Velocity)
+                p_velocity.y = 0
                 particle_group.clear()
             if event.key == pygame.K_LCTRL:
                 boost = True
@@ -228,29 +242,29 @@ while run:
                 print("Changed text:", event.text)
                 val = gravity_slider.get_current_value()
                 try:
-                    val = max(100, min(int(event.text), 1000))
+                    val = max(gravity_slider.value_range[0], min(int(event.text), gravity_slider.value_range[1]))
+                    gravity_slider.set_current_value(val)
+                    gravity = val
                 except ValueError:
                     print(f"Converting error: {event.text=}")
-                gravity_slider.set_current_value(val)
-                gravity = val
             elif event.ui_element == max_gravity_textbox:
                 print("Changed text:", event.text)
                 val = max_gravity_slider.get_current_value()
                 try:
-                    val = max(100, min(int(event.text), 1000))
+                    val = max(max_gravity_slider.value_range[0], min(int(event.text), max_gravity_slider.value_range[0]))
+                    max_gravity_slider.set_current_value(val)
+                    max_gravity = val
                 except ValueError:
                     print(f"Converting error: {event.text=}")
-                max_gravity_slider.set_current_value(val)
-                max_gravity = val
             elif event.ui_element == jumpforce_textbox:
                 print("Changed text:", event.text)
                 val = jumpforce_slider.get_current_value()
                 try:
-                    val = int(event.text)
+                    val = max(jumpforce_slider.value_range[0], min(int(event.text), jumpforce_slider.value_range[0]))
+                    jumpforce_slider.set_current_value(val)
+                    jumpforce = val
                 except ValueError:
                     print(f"Converting error: {event.text=}")
-                jumpforce_slider.set_current_value(val)
-                jumpforce = val
         # endregion
 
         pygame_gui_manager.process_events(event)
