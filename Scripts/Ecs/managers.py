@@ -94,7 +94,7 @@ class SystemManager:
         self.component_manager = component_manager
         self._systems: dict[BaseSystem, set[int]] = dict()
         self._extended_systems: dict[ExtendedSystem, set[int]] = dict()
-        self._systems_ran_already: set[BaseComponent] = set()
+        self._systems_ran_already: set[BaseSystem] = set()
         self._extended_systems_ran_already: set[ExtendedSystem] = set()
 
     def add_system(self, entity: Entity, system: BaseSystem) -> None:

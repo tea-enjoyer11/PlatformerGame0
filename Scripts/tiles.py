@@ -258,8 +258,8 @@ class Chunk:
             en_size += Vector2(size.x // TILESIZE, size.y // TILESIZE)
 
         # print(en_size)
-        x_off = -int(en_size.x // 2)
-        y_off = -int(en_size.y // 2)
+        x_off = 0  # -int(en_size.x // 2)
+        y_off = 0  # -int(en_size.y // 2)
         for x__ in range(int(en_size[0])):
             for y__ in range(int(en_size[1])):
                 for x_, y_ in NEIGHBOR_OFFSETS:
@@ -268,6 +268,13 @@ class Chunk:
                         ret.append(self._tiles[p])
                     if p in self._ghost_tiles:
                         ret.append(self._ghost_tiles[p])
+
+        # x, y = pos.x // TILESIZE % CHUNKSIZE, pos.y // TILESIZE % CHUNKSIZE
+        # for x_, y_ in NEIGHBOR_OFFSETS:
+        #     p = (x+x_, y+y_)
+        #     if p in self._tiles:
+        #         ret.append(self._tiles[p])
+
         return ret
 
     def is_empty(self) -> bool:
@@ -360,9 +367,8 @@ class Chunk:
             List[bool]: [on_top_edge, on_right_edge, on_bottom_edge, on_left_edge]
         """
         x, y = tile.pos.x % CHUNKSIZE, tile.pos.y % CHUNKSIZE
-        additional_w, additional_h = tuple(Vector2(tile_rect(tile).size) // TILESIZE - Vector2(1))
-        x = min(self.size[0], x + additional_w)
-        y = max(0, y - additional_h)
+        x = min(self.size[0], x)
+        y = max(0, y)
 
         # if isinstance(tile, CustomRamp) or isinstance(tile, Ramp):
         #     print(additional_w, additional_h, x, y, type(tile))

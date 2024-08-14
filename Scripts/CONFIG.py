@@ -92,15 +92,15 @@ IMGS = {
     "grass6": load_image("assets/tiles/grass6.png"),
 
     "TEST": load_image("assets/tiles/stone/3.png"),
-    "TESTc_tile(1;14)": load_image("assets/test/0.png"),
-    "TESTc_tile(1;16)": load_image("assets/test/4.png"),
-    "TESTc_tile(2;14)": load_image("assets/test/1.png"),
-    "TESTc_tile(2;15)": load_image("assets/test/2.png"),
-    "TESTc_tile(2;16)": load_image("assets/test/3.png"),
-    "TESTc_tile(0;16)": load_image("assets/test/5.png"),
-    "TESTc_tile(0;15)": load_image("assets/test/6.png"),
-    "TESTc_tile(0;14)": load_image("assets/test/7.png"),
-    "TESTc_tile(1;15)": load_image("assets/test/8.png"),
+    "TESTc_tile(1;14)": load_image("assets/tiles/grass/0.png"),
+    "TESTc_tile(1;16)": load_image("assets/tiles/grass/4.png"),
+    "TESTc_tile(2;14)": load_image("assets/tiles/grass/1.png"),
+    "TESTc_tile(2;15)": load_image("assets/tiles/grass/2.png"),
+    "TESTc_tile(2;16)": load_image("assets/tiles/grass/3.png"),
+    "TESTc_tile(0;16)": load_image("assets/tiles/grass/5.png"),
+    "TESTc_tile(0;15)": load_image("assets/tiles/grass/6.png"),
+    "TESTc_tile(0;14)": load_image("assets/tiles/grass/7.png"),
+    "TESTc_tile(1;15)": load_image("assets/tiles/grass/8.png"),
 }
 
 

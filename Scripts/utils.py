@@ -22,6 +22,13 @@ def load_image(path: str, flip_x: bool = False, flip_y: bool = False) -> Surface
     return i
 
 
+def load_images(path: str) -> List[Surface]:
+    images = []
+    for img_name in sorted(os.listdir(path)):
+        images.append(load_image(path + '/' + img_name))
+    return images
+
+
 def props(cls):
     return [i for i in cls.__dict__.keys() if i[:1] != '_']
 

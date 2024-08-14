@@ -1,10 +1,10 @@
 from Scripts.CONFIG import *
 from Scripts.Ecs.components import BaseComponent
 from Scripts.Ecs.entity import Entity
-from Scripts.tiles import *
 from Scripts.sprites import Animation, cut_spritesheet_row, cut_from_spritesheet
 from Scripts.timer import Timer
-from typing import List, Type
+from typing import List, Type, Tuple
+from Scripts.tilemap import TileMap  # from Scripts.tiles import *
 
 # from Ecs.components import BaseComponent, BaseSystem
 # from Ecs.entity import Entity
@@ -30,7 +30,7 @@ class Transform(Ecs.BaseComponent):
 
     @rect.setter
     def rect(self, rect: Rect) -> None:
-        print(f"rect setter ran with: {rect}")
+        # print(f"rect setter ran with: {rect}")
         self.x = rect.x
         self.y = rect.y
         self.w = rect.w
@@ -42,7 +42,7 @@ class Transform(Ecs.BaseComponent):
 
     @frect.setter
     def frect(self, frect: FRect) -> None:
-        print(f"frect setter ran with: {frect}")
+        # print(f"frect setter ran with: {frect}")
         self.x = frect.x
         self.y = frect.y
         self.w = frect.w
@@ -165,68 +165,77 @@ class CollisionResolver(Ecs.BaseSystem):
         super().__init__([Transform, Velocity])
 
     def update_entity(self, entity: Ecs.Entity, entity_components: dict[type[Ecs.BaseComponent], Ecs.BaseComponent], **kwargs) -> None:
-        # return super().update_entity(entity, entity_components, **kwargs)
         transform: Transform = entity_components[Transform]
         velocity: Velocity = entity_components[Velocity]
+        # anim: Animation = entity_components[Animation]
+
         tilemap: TileMap = kwargs["tilemap"]
         movement = kwargs["movement"]
         dt = kwargs["dt"]
         noclip = kwargs["noclip"]
+        max_gravity = kwargs["max_gravity"]
+        gravity = kwargs["gravity"]
 
         if noclip:
-            transform.x += movement[0] * dt * velocity.x
-            transform.y += movement[1] * dt * velocity.y
+            frame_movement = (movement[0] * 100 * dt, movement[1] * 100 * dt)
+            transform.x += frame_movement[0]
+            transform.y += frame_movement[1]
             return
+        frame_movement = (movement[0] * velocity[0] * dt, 1 * velocity[1] * dt)
 
-        collision_types = {"left": False, "right": False, "up": False, "bottom": False}
-        tiles = tilemap.get_around(transform.pos)
-        normal_tiles = [tile_rect(t) for t in tiles if t.type == TileType.TILE]
-        # ramps: List[Ramp] = [t for t in tiles if t.type in [TileType.RAMP_LEFT, TileType.RAMP_RIGHT]]
-        # custom_ramps: List[CustomRamp] = [t for t in tiles if t.type is TileType.RAMP_CUSTOM]
-        # custom_tiles: List[CustomTile] = [t for t in tiles if t.type is TileType.TILE_CUSTOM]
+        collisions = {'up': False, 'down': False, 'right': False, 'left': False}
 
-        tile_hit_list = collision_test(transform.frect, normal_tiles)
-        # print(1, tile_hit_list)
-        transform.x += movement[0] * dt * velocity.x
-        for t in tile_hit_list:
-            r_copy = transform.frect
-            if movement[1] > 0:
-                r_copy.bottom = t.top
-                collision_types['bottom'] = True
-            elif movement[1] < 0:
-                r_copy.top = t.bottom
-                collision_types['top'] = True
-            transform.frect = r_copy
-        tile_hit_list = collision_test(transform.frect, normal_tiles)
-        # print(2, tile_hit_list)
-        transform.y += movement[1] * dt * velocity.y
-        for t in tile_hit_list:
-            r_copy = transform.frect
-            if movement[0] > 0:
-                r_copy.right = t.left
-                collision_types['right'] = True
-            elif movement[0] < 0:
-                r_copy.left = t.right
-                collision_types['left'] = True
-            transform.frect = r_copy
+        transform.x += frame_movement[0]
+        entity_rect = transform.rect  # .copy()
+        for rect in tilemap.physics_rects_around(transform.pos):
+            if entity_rect.colliderect(rect):
+                if frame_movement[0] > 0:
+                    entity_rect.right = rect.left
+                    collisions['right'] = True
+                if frame_movement[0] < 0:
+                    entity_rect.left = rect.right
+                    collisions['left'] = True
+                transform.x = entity_rect.x
 
-        if collision_types["bottom"]:
-            print("vel.y reset to 0")
-            velocity.y = 0
+        transform.y += frame_movement[1]
+        entity_rect = transform.rect  # .copy()
+        for rect in tilemap.physics_rects_around(transform.pos):
+            if entity_rect.colliderect(rect):
+                if frame_movement[1] > 0:
+                    entity_rect.bottom = rect.top
+                    collisions['down'] = True
+                if frame_movement[1] < 0:
+                    entity_rect.top = rect.bottom
+                    collisions['up'] = True
+                transform.y = entity_rect.y
+
+        # if movement[0] > 0:
+        #     anim.flip = False
+        # if movement[0] < 0:
+        #     anim.flip = True
+
+        # self.last_movement = movement
+
+        velocity[1] = min(max_gravity, velocity[1] + gravity)
+
+        if collisions['down'] or collisions['up']:
+            velocity[1] = 0
+
+        # self.animation.update()
 
 
-class PhysicsMovementSystem(Ecs.BaseSystem):
-    def __init__(self) -> None:
-        super().__init__([Transform, Velocity])
+# class PhysicsMovementSystem(Ecs.BaseSystem):
+#     def __init__(self) -> None:
+#         super().__init__([Transform, Velocity])
 
-    def update_entity(self, entity: Entity, entity_components: dict[type[BaseComponent], BaseComponent], **kwargs) -> None:
-        transform: Transform = entity_components[Transform]
-        velocity: Velocity = entity_components[Velocity]
-        movement = kwargs["movement"]
-        dt = kwargs["dt"]
+#     def update_entity(self, entity: Entity, entity_components: dict[type[BaseComponent], BaseComponent], **kwargs) -> None:
+#         transform: Transform = entity_components[Transform]
+#         velocity: Velocity = entity_components[Velocity]
+#         movement = kwargs["movement"]
+#         dt = kwargs["dt"]
 
-        # transform.x += movement[0] * dt * velocity.x
-        # transform.y += movement[1] * dt * velocity.y
+#         # transform.x += movement[0] * dt * velocity.x
+#         # transform.y += movement[1] * dt * velocity.y
 
 
 # class PhysicsEntity:
