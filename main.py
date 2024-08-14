@@ -94,6 +94,7 @@ class Game:
             'grass': load_images('assets/tiles/grass'),
             'large_decor': load_images('assets/tiles/large_decor'),
             'stone': load_images('assets/tiles/stone'),
+            "bridge": load_images("assets/tiles/bridge"),
         }
 
         self.scroll = Vector2(0)
@@ -257,8 +258,8 @@ class Game:
                 p_anim.state = "jump"
             else:
                 p_anim.state = "idle"
-            if self.noclip:
-                p_anim.state = "idle"
+            # if self.noclip:
+            #     p_anim.state = "idle"
 
             m_pos = tuple(pygame.Vector2(pygame.mouse.get_pos()))
             if pygame.mouse.get_pressed()[0]:

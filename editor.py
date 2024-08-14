@@ -23,6 +23,7 @@ class Editor:
             'grass': load_images('assets/tiles/grass'),
             'large_decor': load_images('assets/tiles/large_decor'),
             'stone': load_images('assets/tiles/stone'),
+            "bridge": load_images("assets/tiles/bridge"),
             'spawners': load_images('assets/tiles/spawners'),
         }
 

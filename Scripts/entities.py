@@ -74,6 +74,7 @@ class Velocity(Ecs.BaseComponent, Vector2):
     def __init__(self, x: int | float, y: int | float) -> None:
         Vector2.__init__(self, x, y)
         Ecs.BaseComponent.__init__(self)
+        self.ignore_falltrough = False
 
 
 class Animation(Ecs.BaseComponent):
@@ -223,6 +224,8 @@ class CollisionResolver(Ecs.BaseSystem):
         max_gravity = kwargs["max_gravity"]
         gravity = kwargs["gravity"]
 
+        ignore_falltrough = velocity.ignore_falltrough
+
         if noclip:
             frame_movement = (movement[0] * 100 * dt, movement[1] * 100 * dt)
             transform.x += frame_movement[0]
@@ -234,7 +237,7 @@ class CollisionResolver(Ecs.BaseSystem):
 
         transform.x += frame_movement[0]
         entity_rect = transform.rect  # .copy()
-        for rect in tilemap.physics_rects_around(transform.pos):
+        for rect in tilemap.physics_rects_around(transform.pos, ignore_falltrough=ignore_falltrough):
             if entity_rect.colliderect(rect):
                 if frame_movement[0] > 0:
                     entity_rect.right = rect.left
@@ -246,7 +249,7 @@ class CollisionResolver(Ecs.BaseSystem):
 
         transform.y += frame_movement[1]
         entity_rect = transform.rect  # .copy()
-        for rect in tilemap.physics_rects_around(transform.pos):
+        for rect in tilemap.physics_rects_around(transform.pos, ignore_falltrough=ignore_falltrough):
             if entity_rect.colliderect(rect):
                 if frame_movement[1] > 0:
                     entity_rect.bottom = rect.top

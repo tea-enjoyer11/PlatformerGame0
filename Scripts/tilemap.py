@@ -15,8 +15,9 @@ AUTOTILE_MAP = {
 }
 
 NEIGHBOR_OFFSETS = [(-1, 0), (-1, -1), (0, -1), (1, -1), (1, 0), (0, 0), (-1, 1), (0, 1), (1, 1)]
-PHYSICS_TILES = {'grass', 'stone'}
+PHYSICS_TILES = {'grass', 'stone', "bridge"}
 AUTOTILE_TYPES = {'grass', 'stone'}
+FALLTRHOGH_TILES = {"bridge"}
 
 
 class TileMap:
@@ -75,10 +76,13 @@ class TileMap:
             if self.tilemap[tile_loc]['type'] in PHYSICS_TILES:
                 return self.tilemap[tile_loc]
 
-    def physics_rects_around(self, pos):
+    def physics_rects_around(self, pos, ignore_falltrough=False):
         rects = []
         for tile in self.get_around(pos):
-            if tile['type'] in PHYSICS_TILES:
+            if ignore_falltrough:
+                if tile["type"] in PHYSICS_TILES and tile["type"] not in FALLTRHOGH_TILES:
+                    rects.append(pygame.Rect(tile['pos'][0] * self.tile_size, tile['pos'][1] * self.tile_size, self.tile_size, self.tile_size))
+            elif tile['type'] in PHYSICS_TILES:
                 rects.append(pygame.Rect(tile['pos'][0] * self.tile_size, tile['pos'][1] * self.tile_size, self.tile_size, self.tile_size))
         return rects
 
