@@ -5,6 +5,9 @@ from Scripts.sprites import Animation, cut_spritesheet_row, cut_from_spritesheet
 from Scripts.timer import Timer
 from typing import List, Type, Tuple
 from Scripts.tilemap import TileMap  # from Scripts.tiles import *
+from Scripts.utils import load_images
+import json
+import time
 
 # from Ecs.components import BaseComponent, BaseSystem
 # from Ecs.entity import Entity
@@ -74,15 +77,37 @@ class Velocity(Ecs.BaseComponent, Vector2):
 
 
 class Animation(Ecs.BaseComponent):
-    def __init__(self, images: List[Surface]) -> None:
+    def __init__(self, config_file_path: str) -> None:
         super().__init__()
         self.states: dict[str, list[Surface]] = {}
         self.states_looping: dict[str, bool] = {}
-        self.states_frame_time: dict[str, bool] = {}
+        self.states_frame_times: dict[str, bool] = {}
+        self.states_offset: dict[str, Tuple] = {}
 
         self.__state: str = None
         self.index: float = 0.0
         self._last_img: Surface = None
+        self.offset = [0, 0]
+
+        self.flip = False
+        self.last_index_update: float = .0
+
+        self.__parse_config(config_file_path)
+
+    def __parse_config(self, path: str) -> None:
+        with open(path, "r") as f:
+            data = json.load(f)
+
+            colorkey = data["colorkey"]
+            default_path = data["file_path"]
+            for state, state_data in data["animations"].items():
+                self.states[state] = load_images(f"{default_path}/{state}", colorkey=colorkey)
+                self.states_looping[state] = state_data["loop"]
+                self.states_frame_times[state] = state_data["frames"]
+                self.states_offset[state] = state_data["offset"]
+
+            self.state = data["default"]
+            self.offset = data["offset"]
 
     @property
     def state(self) -> str:
@@ -90,8 +115,9 @@ class Animation(Ecs.BaseComponent):
 
     @state.setter
     def state(self, state: str) -> None:
-        self.__state = state
-        self.index = 0
+        if state != self.__state:
+            self.__state = state
+            self.index = 0
 
     @property
     def over(self) -> bool:
@@ -99,17 +125,21 @@ class Animation(Ecs.BaseComponent):
             return False
         return self.index == len(self.states[self.__state]) - 1
 
-    def add_state(self, state: str, surfs: list[Surface], looping: bool = True, frame_time: int = 4) -> None:
+    def add_state(self, state: str, surfs: list[Surface], looping: bool, frame_times: List[float]) -> None:
         if state not in self.states:
             self.states[state] = surfs
             self.states_looping[state] = looping
-            self.states_frame_time[state] = frame_time
+            self.states_frame_times[state] = frame_times
 
     def img(self) -> Surface:
-        return self.states[self.__state][int(self.index)]
+        return pygame.transform.flip(self.states[self.__state][int(self.index)], self.flip, False)
 
     def new_img(self) -> bool:
         return self.__last_img != self.img()
+
+    def get_offset(self) -> Tuple:
+        state_offset = self.states_offset[self.state]
+        return (self.offset[0] + state_offset[0], self.offset[1] + state_offset[1])
 
 
 class AnimationUpdater(Ecs.BaseSystem):
@@ -119,13 +149,26 @@ class AnimationUpdater(Ecs.BaseSystem):
     def update_entity(self, entity: Ecs.Entity, entity_components: dict[type[Ecs.BaseComponent], Ecs.BaseComponent], **kwargs) -> None:
         anim: Animation = entity_components[Animation]
         dt = kwargs["dt"]
+        movement = kwargs["movement"]
+
+        if movement[0] > 0:
+            anim.flip = False
+        if movement[0] < 0:
+            anim.flip = True
 
         anim._last_img = anim.img()
-        change = anim.states_frame_time[anim.state]
+        curr = time.time()
+        frame_time = anim.states_frame_times[anim.state][anim.index]
         if anim.states_looping[anim.state]:  # looping
-            anim.index = (anim.index + change * dt) % len(anim.states[anim.state])
+            # anim.index = (anim.index + frame_time * dt) % len(anim.states[anim.state])
+            if curr - anim.last_index_update > frame_time:
+                anim.index = (anim.index + 1) % len(anim.states[anim.state])
+                anim.last_index_update = curr
         else:  # nicht looping
-            anim.index = min(anim.index + change * dt, len(anim.states[anim.state]) - 1)
+            # anim.index = min(anim.index + frame_time * dt, len(anim.states[anim.state]) - 1)
+            if curr - anim.last_index_update > frame_time:
+                anim.index = min(anim.index + 1, len(anim.states[anim.state]) - 1)
+                anim.last_index_update = curr
 
 
 class Image(Ecs.BaseComponent):
@@ -144,7 +187,11 @@ class AnimationRenderer(Ecs.BaseSystem):
         anim: Animation = entity_components[Animation]
         scroll = kwargs["scroll"]
 
-        self.surface.blit(anim.img(), transform.xy)
+        animation_offset = anim.get_offset()
+        self.surface.blit(anim.img(), (transform.x - scroll[0] - animation_offset[0], transform.y - scroll[1] - animation_offset[1]))
+
+        if "debug_animation" in kwargs:
+            pygame.draw.rect(self.surface, kwargs["debug_animation"], Rect(transform.x - scroll[0], transform.y - scroll[1], transform.w, transform.h), 1)
 
 
 class ImageRenderer(Ecs.BaseSystem):
@@ -163,11 +210,11 @@ class ImageRenderer(Ecs.BaseSystem):
 class CollisionResolver(Ecs.BaseSystem):
     def __init__(self) -> None:
         super().__init__([Transform, Velocity])
+        self.last_movement = []
 
     def update_entity(self, entity: Ecs.Entity, entity_components: dict[type[Ecs.BaseComponent], Ecs.BaseComponent], **kwargs) -> None:
         transform: Transform = entity_components[Transform]
         velocity: Velocity = entity_components[Velocity]
-        # anim: Animation = entity_components[Animation]
 
         tilemap: TileMap = kwargs["tilemap"]
         movement = kwargs["movement"]
@@ -209,19 +256,17 @@ class CollisionResolver(Ecs.BaseSystem):
                     collisions['up'] = True
                 transform.y = entity_rect.y
 
-        # if movement[0] > 0:
-        #     anim.flip = False
-        # if movement[0] < 0:
-        #     anim.flip = True
-
-        # self.last_movement = movement
+        self.last_movement = movement
 
         velocity[1] = min(max_gravity, velocity[1] + gravity)
 
         if collisions['down'] or collisions['up']:
             velocity[1] = 0
 
-        # self.animation.update()
+        if "debug_tiles" in kwargs:
+            scroll = kwargs["scroll"]
+            for r in tilemap.physics_rects_around(transform.pos):
+                pygame.draw.rect(screen, kwargs["debug_tiles"], Rect(r.x - scroll[0], r.y - scroll[1], r.w, r.h), 1)
 
 
 # class PhysicsMovementSystem(Ecs.BaseSystem):

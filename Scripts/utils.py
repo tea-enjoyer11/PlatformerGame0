@@ -15,17 +15,17 @@ if not pygame.font.get_init():
     pygame.font.init()
 
 
-def load_image(path: str, flip_x: bool = False, flip_y: bool = False) -> Surface:
+def load_image(path: str, flip_x: bool = False, flip_y: bool = False, colorkey: Tuple = (0, 0, 0)) -> Surface:
     i = pygame.image.load(path).convert()
     i = pygame.transform.flip(i, flip_x=flip_x, flip_y=flip_y)
-    i.set_colorkey("black")
+    i.set_colorkey(colorkey)
     return i
 
 
-def load_images(path: str) -> List[Surface]:
+def load_images(path: str, colorkey: Tuple = (0, 0, 0)) -> List[Surface]:
     images = []
     for img_name in sorted(os.listdir(path)):
-        images.append(load_image(path + '/' + img_name))
+        images.append(load_image(path + '/' + img_name, colorkey=colorkey))
     return images
 
 

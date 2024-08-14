@@ -11,7 +11,7 @@ from Scripts.utils import load_image, draw_text, random_color, make_surface, loa
 from Scripts.particles import ParticleGroup, ImageCache, CircleParticle, LeafParticle
 from Scripts.timer import TimerManager
 
-from Scripts.entities import Transform, Image, ImageRenderer, Velocity, CollisionResolver
+from Scripts.entities import Transform, Image, ImageRenderer, Velocity, CollisionResolver, Animation, AnimationRenderer, AnimationUpdater
 import Scripts.Ecs as Ecs
 
 os.environ['SDL_VIDEO_CENTERED'] = '1'
@@ -38,14 +38,19 @@ class Game:
         self.system_manager = Ecs.SystemManager(self.entity_manager, self.component_manager)
 
         self.p = self.entity_manager.add_entity()
+        p_anim = Animation("assets/entities/player/config.json")
         self.component_manager.add_component(self.p, [
-            Transform(200, 30, 8, 16),
-            Image(make_surface((8, 16), color=(255, 255, 125))),
-            Velocity(250, 250)])
-        self.renderer_sys = ImageRenderer(screen)
-        self.collision_resolver_sys = CollisionResolver()
+            Transform(200, 30, 5, 15),
+            Image(make_surface((5, 16), color=(255, 255, 125))),
+            Velocity(250, 250),
+            p_anim
+        ])
+        self.renderer_sys = AnimationRenderer(screen)
         self.system_manager.add_system(self.p, self.renderer_sys)
+        self.collision_resolver_sys = CollisionResolver()
         self.system_manager.add_system(self.p, self.collision_resolver_sys)
+        self.animation_updater_sys = AnimationUpdater()
+        self.system_manager.add_system(self.p, self.animation_updater_sys)
 
         # region Slider setup
         self.gravity_slider = pygame_gui.elements.UIHorizontalSlider(relative_rect=pygame.Rect(210, 500, 500, 30),
@@ -98,9 +103,16 @@ class Game:
         left = False
         up = False
         down = False
+        jump = False
         boost = False
         run__ = True
+
+        p_velocity: Velocity = self.component_manager.get_component(self.p, Velocity)
+        p_transform: Transform = self.component_manager.get_component(self.p, Transform)
+        p_anim: Animation = self.component_manager.get_component(self.p, Animation)
+
         while run__:
+            jump = False
             dt = mainClock.tick(self.fps_options[self.fps_idx]) * 0.001 * self.dt_multiplicator
 
             # self.scroll += ((self.player.pos - Vector2(4, 4)) - RES / 4 / 2 - self.scroll) / 30
@@ -136,12 +148,11 @@ class Game:
                 "tilemap": self.tile_map,
                 "noclip": self.noclip,
                 "gravity": self.gravity,
-                "max_gravity": self.max_gravity
+                "max_gravity": self.max_gravity,
+                "debug_animation": "red",
+                "debug_tiles": "yellow",
             }
             self.system_manager.run_all_systems(**system_args)
-
-            for r in self.tile_map.physics_rects_around(self.component_manager.get_component(self.p, Transform).pos):
-                pygame.draw.rect(screen, "yellow", Rect(r.x - self.scroll[0], r.y - self.scroll[1], r.w, r.h), 1)
 
             # region Events
             for event in pygame.event.get():
@@ -157,6 +168,7 @@ class Game:
                     if event.key == pygame.K_s:
                         down = True
                     if event.key == pygame.K_SPACE:
+                        jump = True
                         p_velocity = self.component_manager.get_component(self.p, Velocity)
                         p_velocity.y = -self.jumpforce
                         print(p_velocity.xy)
@@ -239,6 +251,15 @@ class Game:
                 self.pygame_gui_manager.process_events(event)
             # endregion
 
+            if right or left:
+                p_anim.state = "run"
+            elif jump:
+                p_anim.state = "jump"
+            else:
+                p_anim.state = "idle"
+            if self.noclip:
+                p_anim.state = "idle"
+
             m_pos = tuple(pygame.Vector2(pygame.mouse.get_pos()))
             if pygame.mouse.get_pressed()[0]:
                 self.particle_group.add([CircleParticle(m_pos, (random.randrange(-100, 100), random.randrange(-100, 100)), 4, type="particle") for _ in range(5)])
@@ -259,6 +280,7 @@ class Game:
             draw_text(master_screen, f"{self.player_movement[0]:.2f}, {self.player_movement[1]:.2f}", (0, 200), outline_color=outline_color)
             draw_text(master_screen, f"TILEPOS: {p_transform.pos // TILESIZE}\nPOS:{p_transform.pos}\nNOCLIP: {self.noclip}", (500, 50), outline_color=outline_color)
             draw_text(master_screen, f"PARTICLES:\nAmount of Particles: {len(self.particle_group)}", (500, 250), outline_color=outline_color)
+            draw_text(master_screen, f"Anim state: {p_anim.state}", (0, 0,),  outline_color=outline_color)
 
             self.pygame_gui_manager.draw_ui(master_screen)
 
