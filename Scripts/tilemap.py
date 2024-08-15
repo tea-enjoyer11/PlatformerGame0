@@ -56,6 +56,15 @@ class TileMap:
                 tiles.append(self.tilemap[check_loc])
         return tiles
 
+    def get_tile(self, pos, convert_to_tilespace=False):
+        if convert_to_tilespace:
+            tile_loc = (int(pos[0] // self.tile_size), int(pos[1] // self.tile_size))
+        else:
+            tile_loc = pos
+        check_loc = str(tile_loc[0]) + ';' + str(tile_loc[1])
+        if check_loc in self.tilemap:
+            return self.tilemap[check_loc]
+
     def save(self, path):
         f = open(path, 'w')
         json.dump({'tilemap': self.tilemap, 'tile_size': self.tile_size, 'offgrid': self.offgrid_tiles}, f)
@@ -85,6 +94,9 @@ class TileMap:
             elif tile['type'] in PHYSICS_TILES:
                 rects.append(pygame.Rect(tile['pos'][0] * self.tile_size, tile['pos'][1] * self.tile_size, self.tile_size, self.tile_size))
         return rects
+
+    def make_rect_from_tile(self, tile) -> pygame.Rect:
+        return pygame.Rect(tile['pos'][0] * self.tile_size, tile['pos'][1] * self.tile_size, self.tile_size, self.tile_size)
 
     def autotile(self):
         for loc in self.tilemap:

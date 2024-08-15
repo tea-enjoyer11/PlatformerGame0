@@ -106,6 +106,7 @@ class Game:
         down = False
         jump = False
         boost = False
+        drop_trough = False
         run__ = True
 
         p_velocity: Velocity = self.component_manager.get_component(self.p, Velocity)
@@ -150,6 +151,7 @@ class Game:
                 "noclip": self.noclip,
                 "gravity": self.gravity,
                 "max_gravity": self.max_gravity,
+                "drop_through": drop_trough,
                 "debug_animation": "red",
                 "debug_tiles": "yellow",
             }
@@ -188,6 +190,8 @@ class Game:
                         p_velocity = self.component_manager.get_component(self.p, Velocity)
                         p_velocity.y = 0
                         self.particle_group.clear()
+                    if event.key == pygame.K_LSHIFT:
+                        drop_trough = True
                     if event.key == pygame.K_LCTRL:
                         boost = True
                     if event.key == pygame.K_g:
@@ -203,6 +207,8 @@ class Game:
                         down = False
                     if event.key == pygame.K_LCTRL:
                         boost = False
+                    if event.key == pygame.K_LSHIFT:
+                        drop_trough = False
 
                 # region ui events
                 if event.type == pygame_gui.UI_HORIZONTAL_SLIDER_MOVED:

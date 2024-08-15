@@ -4,15 +4,50 @@ from Scripts.Ecs.entity import Entity
 from Scripts.sprites import Animation, cut_spritesheet_row, cut_from_spritesheet
 from Scripts.timer import Timer
 from typing import List, Type, Tuple
-from Scripts.tilemap import TileMap  # from Scripts.tiles import *
+from Scripts.tilemap import TileMap, FALLTRHOGH_TILES
 from Scripts.utils import load_images
 import json
 import time
-
 # from Ecs.components import BaseComponent, BaseSystem
 # from Ecs.entity import Entity
 # from Ecs.managers import EntityManager, ComponentManager, SystemManager
 from . import Ecs
+
+
+import collections
+
+
+class FrozenDict(collections.abc.Mapping):  # https://stackoverflow.com/questions/2703599/what-would-a-frozen-dict-be
+    """Don't forget the docstrings!!"""
+
+    def __init__(self, *args, **kwargs):
+        self._d = dict(*args, **kwargs)
+        self._hash = None
+
+    def __iter__(self):
+        return iter(self._d)
+
+    def __len__(self):
+        return len(self._d)
+
+    def __getitem__(self, key):
+        return self._d[key]
+
+    def __hash__(self):
+        # It would have been simpler and maybe more obvious to
+        # use hash(tuple(sorted(self._d.iteritems()))) from this discussion
+        # so far, but this solution is O(n). I don't know what kind of
+        # n we are going to run into, but sometimes it's hard to resist the
+        # urge to optimize when it will gain improved algorithmic performance.
+        if self._hash is None:
+            hash_ = 0
+            for pair in self.items():
+                if isinstance(pair[1], list):
+                    hash_ ^= hash((pair[0], tuple(pair[1])))
+                else:
+                    hash_ ^= hash(pair)
+            self._hash = hash_
+        return self._hash
 
 
 class Transform(Ecs.BaseComponent):
@@ -22,6 +57,8 @@ class Transform(Ecs.BaseComponent):
         self.y = y
         self.w = w
         self.h = h
+
+        self.fall_tiles: set[FrozenDict] = set()
 
     @property
     def xy(self) -> Tuple[int | float, int | float]:
@@ -74,7 +111,6 @@ class Velocity(Ecs.BaseComponent, Vector2):
     def __init__(self, x: int | float, y: int | float) -> None:
         Vector2.__init__(self, x, y)
         Ecs.BaseComponent.__init__(self)
-        self.ignore_falltrough = False
 
 
 class Animation(Ecs.BaseComponent):
@@ -224,7 +260,7 @@ class CollisionResolver(Ecs.BaseSystem):
         max_gravity = kwargs["max_gravity"]
         gravity = kwargs["gravity"]
 
-        ignore_falltrough = velocity.ignore_falltrough
+        ignore_falltrough = kwargs["drop_through"]  # velocity.ignore_falltrough
 
         if noclip:
             frame_movement = (movement[0] * 100 * dt, movement[1] * 100 * dt)
@@ -237,27 +273,42 @@ class CollisionResolver(Ecs.BaseSystem):
 
         transform.x += frame_movement[0]
         entity_rect = transform.rect  # .copy()
-        for rect in tilemap.physics_rects_around(transform.pos, ignore_falltrough=ignore_falltrough):
+        for rect, tile in zip(tilemap.physics_rects_around(transform.pos), tilemap.get_around(transform.pos)):
+            # for rect in tilemap.physics_rects_around(transform.pos):
             if entity_rect.colliderect(rect):
-                if frame_movement[0] > 0:
-                    entity_rect.right = rect.left
-                    collisions['right'] = True
-                if frame_movement[0] < 0:
-                    entity_rect.left = rect.right
-                    collisions['left'] = True
+                if frame_movement[0] > 0:  # right
+                    if tile["type"] not in FALLTRHOGH_TILES:
+                        entity_rect.right = rect.left
+                        collisions['right'] = True
+                if frame_movement[0] < 0:  # left
+                    if tile["type"] not in FALLTRHOGH_TILES:
+                        entity_rect.left = rect.right
+                        collisions['left'] = True
                 transform.x = entity_rect.x
 
         transform.y += frame_movement[1]
         entity_rect = transform.rect  # .copy()
-        for rect in tilemap.physics_rects_around(transform.pos, ignore_falltrough=ignore_falltrough):
+        for rect, tile in zip(tilemap.physics_rects_around(transform.pos), tilemap.get_around(transform.pos)):
             if entity_rect.colliderect(rect):
-                if frame_movement[1] > 0:
-                    entity_rect.bottom = rect.top
-                    collisions['down'] = True
-                if frame_movement[1] < 0:
-                    entity_rect.top = rect.bottom
-                    collisions['up'] = True
+                if frame_movement[1] > 0:  # downards
+                    if ignore_falltrough and tile["type"] in FALLTRHOGH_TILES:
+                        for d in [FrozenDict(t) for t in tilemap.get_around(transform.pos) if t["type"] in FALLTRHOGH_TILES]:
+                            transform.fall_tiles.add(d)
+                    else:
+                        if FrozenDict(tile) not in transform.fall_tiles:
+                            entity_rect.bottom = rect.top
+                            collisions['down'] = True
+                if frame_movement[1] < 0:  # upwards
+                    if tile["type"] not in FALLTRHOGH_TILES:
+                        entity_rect.top = rect.bottom
+                        collisions['up'] = True
                 transform.y = entity_rect.y
+
+        entity_rect = transform.rect  # .copy()
+        for rect, tile in zip(tilemap.physics_rects_around(transform.pos), tilemap.get_around(transform.pos)):
+            if tile["type"] in FALLTRHOGH_TILES and not entity_rect.colliderect(rect):
+                if FrozenDict(tile) in transform.fall_tiles:
+                    transform.fall_tiles.remove(FrozenDict(tile))
 
         self.last_movement = movement
 
@@ -271,6 +322,8 @@ class CollisionResolver(Ecs.BaseSystem):
             for r in tilemap.physics_rects_around(transform.pos):
                 pygame.draw.rect(screen, kwargs["debug_tiles"], Rect(r.x - scroll[0], r.y - scroll[1], r.w, r.h), 1)
 
+        # print(tilemap.get_tile((57, 0)), tilemap.get_tile((56, 3)), FALLTRHOGH_TILES)
+        print(transform.fall_tiles, collisions)
 
 # class PhysicsMovementSystem(Ecs.BaseSystem):
 #     def __init__(self) -> None:

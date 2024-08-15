@@ -128,6 +128,13 @@ class Editor:
                         self.tilemap.autotile()
                     if event.key == pygame.K_o:
                         self.tilemap.save('map.json')
+                        print("saved tilemap")
+                    if event.key == pygame.K_i:
+                        try:
+                            self.tilemap.load('map.json')
+                            print("loaded tilemap")
+                        except FileNotFoundError:
+                            print("File map.json was not found1")
                     if event.key == pygame.K_LSHIFT:
                         self.shift = True
                 if event.type == pygame.KEYUP:
