@@ -61,3 +61,7 @@ def reverseInts(list_: list) -> list:
 def clamp_number_to_range_steps(n, start, end, step) -> float:
     n = clamp(start, n, end)
     return round(n / step) * step
+
+
+def sign(n):
+    return n / abs(n)

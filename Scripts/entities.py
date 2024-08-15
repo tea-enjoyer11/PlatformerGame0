@@ -6,15 +6,12 @@ from Scripts.timer import Timer
 from typing import List, Type, Tuple
 from Scripts.tilemap import TileMap, FALLTRHOGH_TILES
 from Scripts.utils import load_images
+from . import Ecs
 import json
 import time
-# from Ecs.components import BaseComponent, BaseSystem
-# from Ecs.entity import Entity
-# from Ecs.managers import EntityManager, ComponentManager, SystemManager
-from . import Ecs
-
-
 import collections
+from Scripts.Ui import easings
+from Scripts.utils_math import sign
 
 
 class FrozenDict(collections.abc.Mapping):  # https://stackoverflow.com/questions/2703599/what-would-a-frozen-dict-be
@@ -93,9 +90,9 @@ class Transform(Ecs.BaseComponent):
         return Vector2(self.x, self.y)
 
     @pos.setter
-    def pos(self, pos: Vector2) -> None:
-        self.x = pos.x
-        self.y = pos.y
+    def pos(self, pos: Vector2 | Tuple) -> None:
+        self.x = pos[0]
+        self.y = pos[1]
 
     @property
     def size(self) -> Tuple[int | float, int | float]:
@@ -323,7 +320,79 @@ class CollisionResolver(Ecs.BaseSystem):
                 pygame.draw.rect(screen, kwargs["debug_tiles"], Rect(r.x - scroll[0], r.y - scroll[1], r.w, r.h), 1)
 
         # print(tilemap.get_tile((57, 0)), tilemap.get_tile((56, 3)), FALLTRHOGH_TILES)
-        print(transform.fall_tiles, collisions)
+        # print(transform.fall_tiles, collisions)
+
+
+class CardData(Ecs.BaseComponent):
+    def __init__(self, image: Surface) -> None:
+        super().__init__()
+
+        self.image = image
+        self.data: dict[str, object] = {}
+
+
+class CardRenderer(Ecs.ExtendedSystem):
+    def __init__(self, screen: Surface) -> None:
+        super().__init__([CardData, Transform])
+        self.screen = screen
+        self.__last_selected_card = 0
+        self.__selected_card = 0
+        self.animations: dict[int, dict] = {}
+        self.cards_offsetsy: dict[int, int] = {}
+
+    @property
+    def selected_card(self) -> int:
+        return self.__selected_card
+
+    @selected_card.setter
+    def selected_card(self, val: int) -> None:
+        self.__last_selected_card = self.__selected_card
+        self.__selected_card = val
+        self.animations[self.__last_selected_card] = {"direction": 20, "duration": 0.3, "start_time": time.time(), "time": time.time()}
+        self.animations[self.__selected_card] = {"direction": -20, "duration": 0.3, "start_time": time.time(), "time": time.time()}
+
+    def update_entities(self, entites_data: dict[Entity, dict[type[BaseComponent], BaseComponent]], **kwargs) -> None:
+        all_transforms = [ec[Transform] for e, ec in entites_data.items()]
+
+        dt = kwargs["dt"]
+
+        for a in range(len(entites_data)):
+            if a not in self.cards_offsetsy:
+                self.cards_offsetsy[a] = 0
+
+        bar_middle_pos = (DOWNSCALED_RES.x / 2, DOWNSCALED_RES.y / 2)
+        card_size = (48 * 0.8, 67)
+        card_offset = 4
+        n_entities = len(entites_data)
+        total_shift = n_entities * card_size[0] / 2
+
+        a = -3
+        b = int(n_entities / 2)
+        c = bar_middle_pos[1]
+
+        for i, (entity, entity_components) in enumerate(entites_data.items()):
+            transform: Transform = entity_components[Transform]
+            card: CardData = entity_components[CardData]
+
+            if i in self.animations:
+                self.animations[i]["time"] += dt
+                dir = self.animations[i]["direction"]
+                dur = self.animations[i]["duration"]
+                passed_time = min(self.animations[i]["time"] - self.animations[i]["start_time"], dur)
+                t = passed_time / dur
+                self.cards_offsetsy[i] = dir * easings.ease_linear(t)
+                # print(t, passed_time, animation_y_offset)
+                if passed_time >= dur:
+                    del self.animations[i]
+                    self.cards_offsetsy2[i] = self.cards_offsetsy[i]
+
+            transform.pos = (
+                bar_middle_pos[0] + card_size[0] * i - total_shift,
+                -a * (i - b) ** 2 + c + self.cards_offsetsy[i]
+            )
+
+            # print(card.image, transform.pos)
+            self.screen.blit(card.image, transform.pos)
 
 # class PhysicsMovementSystem(Ecs.BaseSystem):
 #     def __init__(self) -> None:

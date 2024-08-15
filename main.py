@@ -11,7 +11,7 @@ from Scripts.utils import load_image, draw_text, random_color, make_surface, loa
 from Scripts.particles import ParticleGroup, ImageCache, CircleParticle, LeafParticle
 from Scripts.timer import TimerManager
 
-from Scripts.entities import Transform, Image, ImageRenderer, Velocity, CollisionResolver, Animation, AnimationRenderer, AnimationUpdater
+from Scripts.entities import Transform, Image, ImageRenderer, Velocity, CollisionResolver, Animation, AnimationRenderer, AnimationUpdater, CardData, CardRenderer
 import Scripts.Ecs as Ecs
 
 os.environ['SDL_VIDEO_CENTERED'] = '1'
@@ -51,6 +51,7 @@ class Game:
         self.system_manager.add_system(self.p, self.collision_resolver_sys)
         self.animation_updater_sys = AnimationUpdater()
         self.system_manager.add_system(self.p, self.animation_updater_sys)
+        self.card_renderer = CardRenderer(screen)
 
         # region Slider setup
         self.gravity_slider = pygame_gui.elements.UIHorizontalSlider(relative_rect=pygame.Rect(210, 500, 500, 30),
@@ -95,9 +96,30 @@ class Game:
             'large_decor': load_images('assets/tiles/large_decor'),
             'stone': load_images('assets/tiles/stone'),
             "bridge": load_images("assets/tiles/bridge"),
+            "cards": {
+                "dash": load_image("assets/cards/dash.png"),
+                "invisibility": load_image("assets/cards/invisibility.png"),
+            },
         }
 
+        self.cards = []
+        self.card_index = 0
         self.scroll = Vector2(0)
+
+    def add_card(self):
+        e = self.entity_manager.add_entity()
+        card_size = (48, 67)
+        self.component_manager.add_component(e, [
+            Transform(DOWNSCALED_RES.x / 2, DOWNSCALED_RES.y / 2, *card_size),
+            CardData(self.assets["cards"][random.choice(("dash", "invisibility"))])
+        ])
+        self.system_manager.add_extended_system(e, self.card_renderer)
+        self.cards.append(e)
+
+    def remove_card(self):
+        if self.cards:
+            e = self.cards.pop()
+            self.entity_manager.remove_entity(e)
 
     def run(self):
         right = False
@@ -161,6 +183,10 @@ class Game:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
                     run__ = False
+                if event.type == pygame.MOUSEWHEEL:
+                    if self.cards:
+                        self.card_index = (self.card_index + event.y) % len(self.cards)
+                        self.card_renderer.selected_card = self.card_index
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_d:
                         right = True
@@ -170,6 +196,10 @@ class Game:
                         up = True
                     if event.key == pygame.K_s:
                         down = True
+                    if event.key == pygame.K_e:
+                        self.add_card()
+                    if event.key == pygame.K_q:
+                        self.remove_card()
                     if event.key == pygame.K_SPACE:
                         jump = True
                         p_velocity = self.component_manager.get_component(self.p, Velocity)
@@ -282,6 +312,7 @@ class Game:
 
             outline_color = None
             p_transform = self.component_manager.get_component(self.p, Transform)
+            draw_text(master_screen, f"Cards: {len(self.cards)} Index: {self.card_index}", (0, 40), outline_color=outline_color)
             draw_text(master_screen, f"DT: {dt:.6f} DT multiplier:{self.dt_multiplicator:.4f}", (0, 80), outline_color=outline_color)
             draw_text(master_screen, f"{mainClock.get_fps():.0f}", (500, 0), outline_color=outline_color)
             draw_text(master_screen, f"{self.player_movement[0]:.2f}, {self.player_movement[1]:.2f}", (0, 200), outline_color=outline_color)

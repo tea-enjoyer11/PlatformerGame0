@@ -1,8 +1,17 @@
 """
 from https://easings.net
+
+**x has to be between 0 and 1**
 """
 
 from math import cos, sin, pi, pow, sqrt
+
+
+def ease_linear(x: float) -> float:
+    """
+    return x
+    """
+    return x
 
 
 def ease_in_sine(x: float) -> float:
