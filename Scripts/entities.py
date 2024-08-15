@@ -384,7 +384,6 @@ class CardRenderer(Ecs.ExtendedSystem):
                 # print(t, passed_time, animation_y_offset)
                 if passed_time >= dur:
                     del self.animations[i]
-                    self.cards_offsetsy2[i] = self.cards_offsetsy[i]
 
             transform.pos = (
                 bar_middle_pos[0] + card_size[0] * i - total_shift,

@@ -99,6 +99,15 @@ class Game:
             "cards": {
                 "dash": load_image("assets/cards/dash.png"),
                 "invisibility": load_image("assets/cards/invisibility.png"),
+                "clone": load_image("assets/cards/clone.png"),
+                "grapple": load_image("assets/cards/grapple.png"),
+                "health_swap": load_image("assets/cards/health_swap.png"),
+                "health": load_image("assets/cards/health.png"),
+                "shield": load_image("assets/cards/shield.png"),
+                "knifes": load_image("assets/cards/knifes.png"),
+                "lightning": load_image("assets/cards/lightning.png"),
+                "timeshift": load_image("assets/cards/timeshift.png"),
+                "boomerang": load_image("assets/cards/boomerang.png"),
             },
         }
 
@@ -111,7 +120,7 @@ class Game:
         card_size = (48, 67)
         self.component_manager.add_component(e, [
             Transform(DOWNSCALED_RES.x / 2, DOWNSCALED_RES.y / 2, *card_size),
-            CardData(self.assets["cards"][random.choice(("dash", "invisibility"))])
+            CardData(self.assets["cards"][random.choice(list(self.assets["cards"]))])
         ])
         self.system_manager.add_extended_system(e, self.card_renderer)
         self.cards.append(e)
