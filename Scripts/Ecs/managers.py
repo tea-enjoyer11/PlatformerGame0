@@ -87,7 +87,7 @@ class ComponentManager:
 class SystemManager:
     __slots__ = ("entity_manager", "component_manager",
                  "_systems", "_extended_systems",
-                 "_systems_ran_already", "_extended_systems_ran_already")
+                 "_systems_ran_already", "_extended_systems_ran_already", "ret")
 
     def __init__(self, entity_manager: EntityManager, component_manager: ComponentManager) -> None:
         self.entity_manager = entity_manager
@@ -96,6 +96,12 @@ class SystemManager:
         self._extended_systems: dict[ExtendedSystem, set[int]] = dict()
         self._systems_ran_already: set[BaseSystem] = set()
         self._extended_systems_ran_already: set[ExtendedSystem] = set()
+
+        self.ret = {}
+        for sys in BaseSystem.__subclasses__():
+            self.ret[sys] = {}
+        for sys in ExtendedSystem.__subclasses__():
+            self.ret[sys] = {}
 
     def add_system(self, entity: Entity, system: BaseSystem) -> None:
         if system not in self._systems:
@@ -107,14 +113,15 @@ class SystemManager:
             self._extended_systems[system] = set()
         self._extended_systems[system].add(hash(entity))
 
-    def run_all_systems(self, /, **kwargs) -> None:
+    def run_all_systems(self, /, **kwargs) -> dict[typing.Type[BaseSystem] | typing.Type[ExtendedSystem], dict]:
         # t0 = time.time()
 
         for base_system, entities in self._systems.items():
+            self.ret[type(base_system)][base_system] = {}
             if base_system in self._systems_ran_already:
                 continue
             for entity in entities:
-                base_system.update_entity(self.entity_manager._entities[entity], self.component_manager.get_all_components(entity, base_system.required_component_types), **kwargs)  # type: ignore
+                self.ret[type(base_system)][base_system][entity] = base_system.update_entity(self.entity_manager._entities[entity], self.component_manager.get_all_components(entity, base_system.required_component_types), **kwargs)  # type: ignore
 
         # t1 = time.time()
 
@@ -122,7 +129,7 @@ class SystemManager:
             if ext_system in self._extended_systems_ran_already:
                 continue
             data = {self.entity_manager._entities[entity_]: self.component_manager.get_all_components(self.entity_manager._entities[entity_], ext_system.required_component_types) for entity_ in entities}
-            ext_system.update_entities(data, **kwargs)
+            self.ret[type(ext_system)][ext_system] = ext_system.update_entities(data, **kwargs)
 
         # print(f"To run all systems it took: {time.time() - t0:.4f} seconds. (BaseSystem: {t1 - t0:.7f} sec. ExtendedSystem: {time.time() - t1:.7f})")
 
@@ -130,19 +137,24 @@ class SystemManager:
         self._systems_ran_already.clear()
         self._extended_systems_ran_already.clear()
 
-    def run_base_system(self, system: BaseSystem, **kwargs) -> None:
+        return self.ret
+
+    def run_base_system(self, system: BaseSystem, **kwargs) -> dict[int, object]:
         entities = self._systems[system]
+        ret = {}
         for entity in entities:
-            system.update_entity(self.entity_manager._entities[entity], self.component_manager.get_all_components(entity, system.required_component_types), **kwargs)  # type: ignore
+            ret[entity] = system.update_entity(self.entity_manager._entities[entity], self.component_manager.get_all_components(entity, system.required_component_types), **kwargs)  # type: ignore
 
         self._systems_ran_already.add(system)
+        return ret
 
-    def run_extended_system(self, system: ExtendedSystem, **kwargs) -> None:
+    def run_extended_system(self, system: ExtendedSystem, **kwargs) -> object:
         entities = self._extended_systems[system]
         data = {self.entity_manager._entities[e]: self.component_manager.get_all_components(self.entity_manager._entities[e], system.required_component_types) for e in entities}
-        system.update_entities(data, **kwargs)
+        ret = system.update_entities(data, **kwargs)
 
         self._extended_systems_ran_already.add(system)
+        return ret
 
     def _remove_all_entities(self) -> None:
         entities = self.entity_manager.final_remove()

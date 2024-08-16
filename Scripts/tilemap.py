@@ -85,18 +85,18 @@ class TileMap:
             if self.tilemap[tile_loc]['type'] in PHYSICS_TILES:
                 return self.tilemap[tile_loc]
 
-    def physics_rects_around(self, pos, ignore_falltrough=False):
+    def physics_rects_around(self, pos):
         rects = []
+        # r = []
         for tile in self.get_around(pos):
-            if ignore_falltrough:
-                if tile["type"] in PHYSICS_TILES and tile["type"] not in FALLTRHOGH_TILES:
-                    rects.append(pygame.Rect(tile['pos'][0] * self.tile_size, tile['pos'][1] * self.tile_size, self.tile_size, self.tile_size))
-            elif tile['type'] in PHYSICS_TILES:
-                rects.append(pygame.Rect(tile['pos'][0] * self.tile_size, tile['pos'][1] * self.tile_size, self.tile_size, self.tile_size))
+            if tile["type"] in PHYSICS_TILES:
+                rects.append(pygame.FRect(tile['pos'][0] * self.tile_size, tile['pos'][1] * self.tile_size, self.tile_size, self.tile_size))
+                # r.append(tile)
+        # print(r)
         return rects
 
-    def make_rect_from_tile(self, tile) -> pygame.Rect:
-        return pygame.Rect(tile['pos'][0] * self.tile_size, tile['pos'][1] * self.tile_size, self.tile_size, self.tile_size)
+    def make_rect_from_tile(self, tile) -> pygame.FRect:
+        return pygame.FRect(tile['pos'][0] * self.tile_size, tile['pos'][1] * self.tile_size, self.tile_size, self.tile_size)
 
     def autotile(self):
         for loc in self.tilemap:

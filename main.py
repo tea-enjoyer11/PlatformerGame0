@@ -19,12 +19,12 @@ os.environ['SDL_VIDEO_CENTERED'] = '1'
 
 class Game:
     def __init__(self) -> None:
-        self.timermanager = TimerManager()
+        # self.timermanager = TimerManager()
         self.dt_multiplicator = 1
         self.gravity = 6
         self.max_gravity = 700
         self.jumpforce = 600
-        self.noclip = True
+        self.noclip = False
         self.scroll = Vector2(0)
         self.pygame_gui_manager = pygame_gui.ui_manager.UIManager((800, 600))
         self.tile_map = TileMap(self)
@@ -147,13 +147,11 @@ class Game:
         while run__:
             jump = False
             dt = mainClock.tick(self.fps_options[self.fps_idx]) * 0.001 * self.dt_multiplicator
-
+            TimerManager.update()
             # self.scroll += ((self.player.pos - Vector2(4, 4)) - RES / 4 / 2 - self.scroll) / 30
             # scroll += ((self.p.pos - Vector2(TILESIZE / 2)) - DOWNSCALED_RES / 2 - scroll) / 30
             self.scroll += ((self.component_manager.get_component(self.p, Transform).pos - Vector2(TILESIZE / 2)) - DOWNSCALED_RES / 2 - self.scroll) / 30
             screen.fill((0, 0, 0))
-
-            self.timermanager.update()
 
             if right:
                 self.player_movement[0] = 1
@@ -186,7 +184,17 @@ class Game:
                 "debug_animation": "red",
                 "debug_tiles": "yellow",
             }
-            self.system_manager.run_all_systems(**system_args)
+            systems_ret = self.system_manager.run_all_systems(**system_args)
+            print(systems_ret)
+
+            if (tiles := systems_ret[CollisionResolver][self.collision_resolver_sys][self.p]):
+                c1 = (0, 0, 255)
+                c2 = (0, 255, 255)
+                for tile in tiles:
+                    c = c2
+                    if tile["type"] == "decor":
+                        c = c1
+                    pygame.draw.rect(screen, c, Rect(tile["pos"][0] * 16 - self.scroll[0], tile["pos"][1] * 16 - self.scroll[1], 16, 16))
 
             # region Events
             for event in pygame.event.get():
@@ -213,7 +221,7 @@ class Game:
                         jump = True
                         p_velocity = self.component_manager.get_component(self.p, Velocity)
                         p_velocity.y = -self.jumpforce
-                        print(p_velocity.xy)
+                        # print(p_velocity.xy)
                         # self.p.set_state("jump_init")
                     if event.key == pygame.K_TAB:
                         self.noclip = not self.noclip

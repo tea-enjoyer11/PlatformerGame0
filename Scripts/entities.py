@@ -55,7 +55,8 @@ class Transform(Ecs.BaseComponent):
         self.w = w
         self.h = h
 
-        self.fall_tiles: set[FrozenDict] = set()
+        self.falling_through = False
+        self.fall_through_timer = Timer(0.18, False, False)
 
     @property
     def xy(self) -> Tuple[int | float, int | float]:
@@ -257,7 +258,11 @@ class CollisionResolver(Ecs.BaseSystem):
         max_gravity = kwargs["max_gravity"]
         gravity = kwargs["gravity"]
 
-        ignore_falltrough = kwargs["drop_through"]  # velocity.ignore_falltrough
+        return_tiles = []
+
+        ignore_falltrough = kwargs["drop_through"]
+        if ignore_falltrough:
+            transform.falling_through = True
 
         if noclip:
             frame_movement = (movement[0] * 100 * dt, movement[1] * 100 * dt)
@@ -268,44 +273,54 @@ class CollisionResolver(Ecs.BaseSystem):
 
         collisions = {'up': False, 'down': False, 'right': False, 'left': False}
 
+        collided_with_fall_trough = False
         transform.x += frame_movement[0]
-        entity_rect = transform.rect  # .copy()
+        entity_rect = transform.frect
         for rect, tile in zip(tilemap.physics_rects_around(transform.pos), tilemap.get_around(transform.pos)):
-            # for rect in tilemap.physics_rects_around(transform.pos):
             if entity_rect.colliderect(rect):
+                return_tiles.append(tile)
+                if tile["type"] in FALLTRHOGH_TILES:  # wenn spieler nicht mehr mit fallthrough collided, dann kann man aus machen.
+                    collided_with_fall_trough = True
                 if frame_movement[0] > 0:  # right
-                    if tile["type"] not in FALLTRHOGH_TILES:
+                    if tile["type"] in FALLTRHOGH_TILES:
+                        # transform.falling_through = True
+                        pass
+                    else:
                         entity_rect.right = rect.left
                         collisions['right'] = True
                 if frame_movement[0] < 0:  # left
-                    if tile["type"] not in FALLTRHOGH_TILES:
+                    if tile["type"] in FALLTRHOGH_TILES:
+                        # transform.falling_through = True
+                        pass
+                    else:
                         entity_rect.left = rect.right
                         collisions['left'] = True
                 transform.x = entity_rect.x
 
         transform.y += frame_movement[1]
-        entity_rect = transform.rect  # .copy()
+        entity_rect = transform.frect
         for rect, tile in zip(tilemap.physics_rects_around(transform.pos), tilemap.get_around(transform.pos)):
             if entity_rect.colliderect(rect):
+                return_tiles.append(tile)
+                if tile["type"] in FALLTRHOGH_TILES:  # wenn spieler nicht mehr mit fallthrough collided, dann kann man aus machen.
+                    collided_with_fall_trough = True
                 if frame_movement[1] > 0:  # downards
-                    if ignore_falltrough and tile["type"] in FALLTRHOGH_TILES:
-                        for d in [FrozenDict(t) for t in tilemap.get_around(transform.pos) if t["type"] in FALLTRHOGH_TILES]:
-                            transform.fall_tiles.add(d)
+                    if tile["type"] in FALLTRHOGH_TILES and transform.falling_through:
+                        pass
                     else:
-                        if FrozenDict(tile) not in transform.fall_tiles:
-                            entity_rect.bottom = rect.top
-                            collisions['down'] = True
+                        entity_rect.bottom = rect.top
+                        collisions['down'] = True
                 if frame_movement[1] < 0:  # upwards
-                    if tile["type"] not in FALLTRHOGH_TILES:
+                    if tile["type"] in FALLTRHOGH_TILES:
+                        pass
+                    else:
                         entity_rect.top = rect.bottom
                         collisions['up'] = True
                 transform.y = entity_rect.y
 
-        entity_rect = transform.rect  # .copy()
-        for rect, tile in zip(tilemap.physics_rects_around(transform.pos), tilemap.get_around(transform.pos)):
-            if tile["type"] in FALLTRHOGH_TILES and not entity_rect.colliderect(rect):
-                if FrozenDict(tile) in transform.fall_tiles:
-                    transform.fall_tiles.remove(FrozenDict(tile))
+        # resetting fallthrough
+        if not collided_with_fall_trough:
+            transform.falling_through = False
 
         self.last_movement = movement
 
@@ -319,8 +334,9 @@ class CollisionResolver(Ecs.BaseSystem):
             for r in tilemap.physics_rects_around(transform.pos):
                 pygame.draw.rect(screen, kwargs["debug_tiles"], Rect(r.x - scroll[0], r.y - scroll[1], r.w, r.h), 1)
 
-        # print(tilemap.get_tile((57, 0)), tilemap.get_tile((56, 3)), FALLTRHOGH_TILES)
-        # print(transform.fall_tiles, collisions)
+        # print(tilemap.get_around(transform.pos))
+
+        return return_tiles
 
 
 class CardData(Ecs.BaseComponent):
@@ -340,11 +356,11 @@ class CardRenderer(Ecs.ExtendedSystem):
         self.animations: dict[int, dict] = {}
         self.cards_offsetsy: dict[int, int] = {}
 
-    @property
+    @ property
     def selected_card(self) -> int:
         return self.__selected_card
 
-    @selected_card.setter
+    @ selected_card.setter
     def selected_card(self, val: int) -> None:
         self.__last_selected_card = self.__selected_card
         self.__selected_card = val

@@ -1,5 +1,5 @@
-import pygame
 from typing import Callable, Any
+import time
 
 
 class TimerManager:
@@ -48,7 +48,7 @@ class Timer:
 
     def activate(self):
         self.active = True
-        self.start_time = pygame.time.get_ticks()
+        self.start_time = time.time()
         self._execute_hooks(self._start_hooks)
 
     def end(self) -> None:
@@ -61,10 +61,11 @@ class Timer:
             self.activate()
 
     def update(self, /):
-        if pygame.time.get_ticks() - self.start_time >= self.duration:
+        if time.time() - self.start_time >= self.duration:
             if self.start_time != 0:
                 self.end()
             self.deactivate()
+        # print(f"updateded timer: {self}, {time.time() - self.start_time}")
 
     def add_start_hook(self, hook: Callable):
         self._start_hooks.append(hook)
@@ -94,6 +95,7 @@ def call_on_timer_end(timer: Timer):
 
 
 if __name__ == "__main__":
+    import pygame
     pygame.init()
 
     timermanager = TimerManager()
