@@ -1,6 +1,9 @@
 import typing
 from .entity import Entity
 
+if typing.TYPE_CHECKING:
+    from .managers import EntityManager, ComponentManager, SystemManager
+
 
 class BaseComponent:
     __slots__ = ("__dict__")
@@ -18,6 +21,10 @@ class BaseComponent:
 class BaseSystem:
     __slots__ = ("required_component_types", )
 
+    entity_manager: "EntityManager" = None
+    component_manager: "ComponentManager" = None
+    system_manager: "SystemManager" = None
+
     def __init__(self, required_component_types: typing.List[typing.Type[BaseComponent]]) -> None:
         self.required_component_types = required_component_types
 
@@ -33,6 +40,10 @@ class BaseSystem:
 
 class ExtendedSystem:
     __slots__ = ("required_component_types", )
+
+    entity_manager: "EntityManager" = None
+    component_manager: "ComponentManager" = None
+    system_manager: "SystemManager" = None
 
     def __init__(self, required_component_types: typing.List[typing.Type[BaseComponent]]) -> None:
         self.required_component_types = required_component_types
