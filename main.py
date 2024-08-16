@@ -11,7 +11,7 @@ from Scripts.utils import load_image, draw_text, random_color, make_surface, loa
 from Scripts.particles import ParticleGroup, ImageCache, CircleParticle, LeafParticle
 from Scripts.timer import TimerManager
 
-from Scripts.entities import Transform, Image, ImageRenderer, Velocity, CollisionResolver, Animation, AnimationRenderer, AnimationUpdater, CardData, CardRenderer
+from Scripts.entities import Transform, Image, ImageRenderer, Velocity, CollisionResolver, Animation, AnimationRenderer, AnimationUpdater, CardData, CardRenderer, EnemyPathFinderWalker, EnemyCollisionResolver
 import Scripts.Ecs as Ecs
 
 os.environ['SDL_VIDEO_CENTERED'] = '1'
@@ -90,6 +90,8 @@ class Game:
         self.fps_options = [0, 15, 30, 60, 120, 240]
         self.fps_idx = 0
 
+        self.enemies = []
+
         self.assets = {
             'decor': load_images('assets/tiles/decor'),
             'grass': load_images('assets/tiles/grass'),
@@ -145,6 +147,19 @@ class Game:
         p_transform: Transform = self.component_manager.get_component(self.p, Transform)
         p_anim: Animation = self.component_manager.get_component(self.p, Animation)
 
+        enemy = self.entity_manager.add_entity()
+        enemy_path_finder_walker = EnemyPathFinderWalker(self.p)
+        enemy_coll_resolver = EnemyCollisionResolver(enemy_path_finder_walker)
+        self.component_manager.add_component(enemy, [
+            Transform(350, 81, 7, 11),
+            Animation("assets/entities/enemies/walker/config.json"),
+            Velocity(0, 0),
+        ])
+        self.system_manager.add_system(enemy, self.animation_updater_sys)
+        self.system_manager.add_system(enemy, self.renderer_sys)
+        self.system_manager.add_system(enemy, enemy_path_finder_walker)
+        self.system_manager.add_system(enemy, enemy_coll_resolver)
+
         while run__:
             jump = False
             dt = mainClock.tick(self.fps_options[self.fps_idx]) * 0.001 * self.dt_multiplicator
@@ -181,11 +196,16 @@ class Game:
                 "noclip": self.noclip,
                 "gravity": self.gravity,
                 "max_gravity": self.max_gravity,
+                "player_entity": self.p,
                 "drop_through": drop_trough,
                 "debug_animation": "red",
                 "debug_tiles": "yellow",
+                # "debug_pathfinder": (255, 0, 255),
+                "surface": screen,  # eig. nicht gut das so zu machen oder etwa doch ??
             }
             systems_ret = self.system_manager.run_all_systems(**system_args)
+            walker_ret = self.system_manager.run_base_system(enemy_path_finder_walker, **system_args)
+            print("hit") if walker_ret[enemy] else None
             if systems_ret[CollisionResolver][self.collision_resolver_sys][self.p]["collisions"]["down"]:
                 reached_max_jump = False
 

@@ -11,7 +11,8 @@ import json
 import time
 import collections
 from Scripts.Ui import easings
-from Scripts.utils_math import sign
+from Scripts.utils_math import sign, dist
+import random
 
 
 class FrozenDict(collections.abc.Mapping):  # https://stackoverflow.com/questions/2703599/what-would-a-frozen-dict-be
@@ -186,10 +187,11 @@ class AnimationUpdater(Ecs.BaseSystem):
         dt = kwargs["dt"]
         movement = kwargs["movement"]
 
-        if movement[0] > 0:
-            anim.flip = False
-        if movement[0] < 0:
-            anim.flip = True
+        if entity == kwargs["player_entity"]:
+            if movement[0] > 0:
+                anim.flip = False
+            if movement[0] < 0:
+                anim.flip = True
 
         anim._last_img = anim.img()
         curr = time.time()
@@ -408,6 +410,206 @@ class CardRenderer(Ecs.ExtendedSystem):
 
             # print(card.image, transform.pos)
             self.screen.blit(card.image, transform.pos)
+
+
+class EnemyCollisionResolver(Ecs.BaseSystem):
+    def __init__(self, enemypathfinder) -> None:
+        super().__init__([Transform, Velocity])
+        self.enemypathfinder = enemypathfinder
+
+    def update_entity(self, entity: Entity, entity_components: dict[type[BaseComponent], BaseComponent], **kwargs) -> None:
+        transform: Transform = entity_components[Transform]
+        velocity: Velocity = entity_components[Velocity]
+
+        tilemap: TileMap = kwargs["tilemap"]
+        dt = kwargs["dt"]
+        max_gravity = kwargs["max_gravity"]
+        gravity = kwargs["gravity"]
+
+        return_data = {"coll_tiles": [], "collisions": None}
+        collisions = {'up': False, 'down': False, 'right': False, 'left': False}
+
+        frame_movement = (bool(velocity.x) * velocity[0] * dt, 1 * velocity[1] * dt)
+
+        transform.x += frame_movement[0]
+        entity_rect = transform.frect
+        for rect, tile in zip(tilemap.physics_rects_around(transform.pos), tilemap.get_around(transform.pos)):
+            if entity_rect.colliderect(rect):
+                return_data["coll_tiles"].append(tile)
+                if frame_movement[0] > 0:  # right
+                    if tile["type"] in FALLTRHOGH_TILES:
+                        # transform.falling_through = True
+                        pass
+                    else:
+                        entity_rect.right = rect.left
+                        collisions['right'] = True
+                if frame_movement[0] < 0:  # left
+                    if tile["type"] in FALLTRHOGH_TILES:
+                        # transform.falling_through = True
+                        pass
+                    else:
+                        entity_rect.left = rect.right
+                        collisions['left'] = True
+                transform.x = entity_rect.x
+
+        transform.y += frame_movement[1]
+        entity_rect = transform.frect
+        for rect, tile in zip(tilemap.physics_rects_around(transform.pos), tilemap.get_around(transform.pos)):
+            if entity_rect.colliderect(rect):
+                return_data["coll_tiles"].append(tile)
+                if frame_movement[1] > 0:  # downards
+                    if tile["type"] in FALLTRHOGH_TILES and transform.falling_through or (tile["type"] in FALLTRHOGH_TILES and (rect.y - rect.h/2) - transform.pos.y < 1):  # durch droppen mit key input
+                        pass
+                    else:
+                        entity_rect.bottom = rect.top
+                        collisions['down'] = True
+                if frame_movement[1] < 0:  # upwards
+                    if tile["type"] in FALLTRHOGH_TILES:
+                        pass
+                    else:
+                        entity_rect.top = rect.bottom
+                        collisions['up'] = True
+                transform.y = entity_rect.y
+
+        velocity[1] = min(max_gravity, velocity[1] + gravity)
+
+        if collisions['down'] or collisions['up']:
+            velocity[1] = 0
+
+        if "debug_tiles" in kwargs:
+            scroll = kwargs["scroll"]
+            for r in tilemap.physics_rects_around(transform.pos):
+                pygame.draw.rect(screen, kwargs["debug_tiles"], Rect(r.x - scroll[0], r.y - scroll[1], r.w, r.h), 1)
+
+        self.enemypathfinder.collisions = collisions
+
+        return_data["collisions"] = collisions
+        return return_data
+
+
+def skalar(p1, p2):
+    return (p1[0]*p2[0] + p1[1]*p2[1])
+
+
+class Ray:
+    def __init__(self, origin, direction) -> None:
+        self.origin = origin
+        l = sum(direction)
+        self.direction = (-direction[0] / l, -direction[1] / l)  # v / ||v||
+
+    def hit(self, pos, width=4) -> Tuple:
+        # https://gdbooks.gitbooks.io/3dcollisions/content/Chapter1/closest_point_on_line.html
+        a = self.origin
+        b = (self.origin[0] + self.direction[0], self.origin[1] + self.direction[1])
+        c = pos
+
+        # t = Dot(c - a, ab) / Dot(ab, ab)
+        # point = a + t * ab
+
+        t = skalar(c - a, b - a) / skalar(b-a, b-a)
+        point = a + t * (b-a)
+
+        d = dist(point, pos)
+        # print(a, b, c, self.direction, point, pos, t, d)
+        if d >= width:
+            return False
+        return True
+
+
+class EnemyPathFinderWalker(Ecs.BaseSystem):
+    def __init__(self, target_entity) -> None:
+        super().__init__([Transform, Velocity, Animation])
+
+        self.target_entity = target_entity
+        self.walking = False
+        self.active = False
+        self.collisions = {'up': False, 'down': False, 'right': False, 'left': False}
+
+        self.charge = .0
+        self.charge_duration = .3
+        self.target_point = None
+
+    def update_entity(self, entity: Entity, entity_components: dict[type[BaseComponent], BaseComponent], **kwargs) -> bool:
+        transform: Transform = entity_components[Transform]
+        velocity: Velocity = entity_components[Velocity]
+        anim: Animation = entity_components[Animation]
+
+        dt = kwargs["dt"]
+        tilemap: TileMap = kwargs["tilemap"]
+
+        d = 100
+        walking_target_pos = None
+        shoot = False
+        player_hit = False
+        target_transform: Transform = self.component_manager.get_component(self.target_entity, Transform)
+
+        if self.walking:
+            if tilemap.solid_check((walking_target_pos := (transform.rect.centerx + (-7 if anim.flip else 7), transform.y + tilemap.tile_size))):
+                if self.collisions["right"] or self.collisions["left"]:
+                    print(1)
+                    anim.flip = not anim.flip
+                velocity.x = -15 if anim.flip else 15
+            else:
+                anim.flip = not anim.flip
+
+        if self.active:
+            if not self.target_point:
+                self.target_point = target_transform.rect.center
+            self.charge += dt
+            if self.charge >= self.charge_duration:
+                shoot = True
+                self.charge = 0
+
+        if shoot:
+            print("shooting")
+            # direction = (self.target_point[0] - transform.x, self.target_point[1] - transform.y)
+            direction = self.target_point - transform.pos
+            ray = Ray(transform.pos, direction)
+            for entitiy in [self.target_entity]:
+                if ray.hit(target_transform.rect.center):  # (richtige pos benutzen) dmg dealen oder sonst was hier ...
+                    player_hit = True
+            self.target_point = None
+
+        if dist(target_transform.rect.center, transform.pos) < d:
+            self.walking = False
+            self.active = True
+            velocity.x = 0
+            anim.state = "idle"
+        else:
+            self.walking = True
+            self.active = False
+            anim.state = "run"
+            self.charge = 0
+            self.target_point = None
+
+        transform.x += velocity.x * dt
+        transform.y += velocity.y * dt
+
+        if self.active and self.target_point:
+            scroll = kwargs["scroll"]
+            a = transform.pos
+            b = self.target_point
+            t = self.charge / self.charge_duration
+            t = easings.ease_in_circ(t)
+            c = (a[0] + (b[0]-a[0])*t, a[1] + (b[1]-a[1])*t)
+            pygame.draw.line(kwargs["surface"], (0, 255, 0), (a[0] - scroll[0], a[1] - scroll[1]), (c[0] - scroll[0], c[1]-scroll[1]), 1)
+
+        if "debug_pathfinder" in kwargs:
+            scroll = kwargs["scroll"]
+            if walking_target_pos:
+                pygame.draw.circle(kwargs["surface"], kwargs["debug_pathfinder"], (walking_target_pos[0] - scroll[0], walking_target_pos[1] - scroll[1]), 3)
+                r = Rect(((walking_target_pos[0] // 16) * 16) - scroll[0], ((walking_target_pos[1] // 16) * 16) - scroll[1], 16, 16)
+                pygame.draw.rect(kwargs["surface"], kwargs["debug_pathfinder"], r, 1)
+
+            pygame.draw.circle(kwargs["surface"], kwargs["debug_pathfinder"], (transform.x - scroll[0], transform.y - scroll[1]), d, 1)
+            if self.active:
+                tp = target_transform.rect.center
+                pygame.draw.line(kwargs["surface"], kwargs["debug_pathfinder"], (tp[0] - scroll[0], tp[1] - scroll[1]), (transform.rect.centerx - scroll[0], transform.rect.centery - scroll[1]), 1)
+
+                if self.target_point:
+                    pygame.draw.circle(kwargs["surface"], (255, 0, 0), (self.target_point[0] - scroll[0], self.target_point[1] - scroll[1]), 3)
+
+        return player_hit
 
 # class PhysicsMovementSystem(Ecs.BaseSystem):
 #     def __init__(self) -> None:
