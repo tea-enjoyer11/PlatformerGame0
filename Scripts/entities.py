@@ -258,27 +258,27 @@ class CollisionResolver(Ecs.BaseSystem):
         max_gravity = kwargs["max_gravity"]
         gravity = kwargs["gravity"]
 
-        return_tiles = []
+        return_data = {"coll_tiles": [], "collisions": None}
+        collisions = {'up': False, 'down': False, 'right': False, 'left': False}
 
         ignore_falltrough = kwargs["drop_through"]
         if ignore_falltrough:
             transform.falling_through = True
 
         if noclip:
-            frame_movement = (movement[0] * 100 * dt, movement[1] * 100 * dt)
+            frame_movement = (movement[0] * 200 * dt, movement[1] * 200 * dt)
             transform.x += frame_movement[0]
             transform.y += frame_movement[1]
-            return
+            return_data["collisions"] = collisions
+            return return_data
         frame_movement = (movement[0] * velocity[0] * dt, 1 * velocity[1] * dt)
-
-        collisions = {'up': False, 'down': False, 'right': False, 'left': False}
 
         collided_with_fall_trough = False
         transform.x += frame_movement[0]
         entity_rect = transform.frect
         for rect, tile in zip(tilemap.physics_rects_around(transform.pos), tilemap.get_around(transform.pos)):
             if entity_rect.colliderect(rect):
-                return_tiles.append(tile)
+                return_data["coll_tiles"].append(tile)
                 if tile["type"] in FALLTRHOGH_TILES:  # wenn spieler nicht mehr mit fallthrough collided, dann kann man aus machen.
                     collided_with_fall_trough = True
                 if frame_movement[0] > 0:  # right
@@ -301,7 +301,7 @@ class CollisionResolver(Ecs.BaseSystem):
         entity_rect = transform.frect
         for rect, tile in zip(tilemap.physics_rects_around(transform.pos), tilemap.get_around(transform.pos)):
             if entity_rect.colliderect(rect):
-                return_tiles.append(tile)
+                return_data["coll_tiles"].append(tile)
                 if tile["type"] in FALLTRHOGH_TILES:  # wenn spieler nicht mehr mit fallthrough collided, dann kann man aus machen.
                     collided_with_fall_trough = True
                 if frame_movement[1] > 0:  # downards
@@ -335,8 +335,8 @@ class CollisionResolver(Ecs.BaseSystem):
                 pygame.draw.rect(screen, kwargs["debug_tiles"], Rect(r.x - scroll[0], r.y - scroll[1], r.w, r.h), 1)
 
         # print(tilemap.get_around(transform.pos))
-
-        return return_tiles
+        return_data["collisions"] = collisions
+        return return_data
 
 
 class CardData(Ecs.BaseComponent):

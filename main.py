@@ -23,7 +23,7 @@ class Game:
         self.dt_multiplicator = 1
         self.gravity = 6
         self.max_gravity = 700
-        self.jumpforce = 600
+        self.jumpforce = 10000  # 600
         self.noclip = False
         self.scroll = Vector2(0)
         self.pygame_gui_manager = pygame_gui.ui_manager.UIManager((800, 600))
@@ -136,6 +136,7 @@ class Game:
         up = False
         down = False
         jump = False
+        reached_max_jump = False
         boost = False
         drop_trough = False
         run__ = True
@@ -186,8 +187,10 @@ class Game:
             }
             systems_ret = self.system_manager.run_all_systems(**system_args)
             print(systems_ret)
+            if systems_ret[CollisionResolver][self.collision_resolver_sys][self.p]["collisions"]["down"]:
+                reached_max_jump = False
 
-            if (tiles := systems_ret[CollisionResolver][self.collision_resolver_sys][self.p]):
+            if (tiles := systems_ret[CollisionResolver][self.collision_resolver_sys][self.p]["coll_tiles"]):
                 c1 = (0, 0, 255)
                 c2 = (0, 255, 255)
                 for tile in tiles:
@@ -197,6 +200,13 @@ class Game:
                     pygame.draw.rect(screen, c, Rect(tile["pos"][0] * 16 - self.scroll[0], tile["pos"][1] * 16 - self.scroll[1], 16, 16))
 
             # region Events
+            keys = pygame.key.get_pressed()
+            if keys[pygame.K_SPACE] and not reached_max_jump:
+                jump = True
+                p_velocity.y -= self.jumpforce / (400-p_velocity.y)
+                if p_velocity.y <= -400:
+                    reached_max_jump = True
+
             for event in pygame.event.get():
                 if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
                     run__ = False
@@ -217,24 +227,15 @@ class Game:
                         self.add_card()
                     if event.key == pygame.K_q:
                         self.remove_card()
-                    if event.key == pygame.K_SPACE:
-                        jump = True
-                        p_velocity = self.component_manager.get_component(self.p, Velocity)
-                        p_velocity.y = -self.jumpforce
-                        # print(p_velocity.xy)
-                        # self.p.set_state("jump_init")
                     if event.key == pygame.K_TAB:
                         self.noclip = not self.noclip
-                        p_velocity = self.component_manager.get_component(self.p, Velocity)
                         p_velocity.y = 0
                     if event.key == pygame.K_UP:
                         self.dt_multiplicator = min(5, self.dt_multiplicator + 0.25)
                     if event.key == pygame.K_DOWN:
                         self.dt_multiplicator = max(0, self.dt_multiplicator - 0.25)
                     if event.key == pygame.K_r:
-                        p_transform = self.component_manager.get_component(self.p, Transform)
                         p_transform.pos = Vector2(200, 50)
-                        p_velocity = self.component_manager.get_component(self.p, Velocity)
                         p_velocity.y = 0
                         self.particle_group.clear()
                     if event.key == pygame.K_LSHIFT:
@@ -256,6 +257,8 @@ class Game:
                         boost = False
                     if event.key == pygame.K_LSHIFT:
                         drop_trough = False
+                    if event.key == pygame.K_SPACE:
+                        reached_max_jump = True
 
                 # region ui events
                 if event.type == pygame_gui.UI_HORIZONTAL_SLIDER_MOVED:
@@ -328,11 +331,10 @@ class Game:
             master_screen.blit(pygame.transform.scale(screen, RES), (0, 0))
 
             outline_color = None
-            p_transform = self.component_manager.get_component(self.p, Transform)
             draw_text(master_screen, f"Cards: {len(self.cards)} Index: {self.card_index}", (0, 40), outline_color=outline_color)
             draw_text(master_screen, f"DT: {dt:.6f} DT multiplier:{self.dt_multiplicator:.4f}", (0, 80), outline_color=outline_color)
             draw_text(master_screen, f"{mainClock.get_fps():.0f}", (500, 0), outline_color=outline_color)
-            draw_text(master_screen, f"{self.player_movement[0]:.2f}, {self.player_movement[1]:.2f}", (0, 200), outline_color=outline_color)
+            draw_text(master_screen, f"{self.player_movement[0]:.2f}, {self.player_movement[1]:.2f}, {p_velocity.xy}", (0, 200), outline_color=outline_color)
             draw_text(master_screen, f"TILEPOS: {p_transform.pos // TILESIZE}\nPOS:{p_transform.pos}\nNOCLIP: {self.noclip}", (500, 50), outline_color=outline_color)
             draw_text(master_screen, f"PARTICLES:\nAmount of Particles: {len(self.particle_group)}", (500, 250), outline_color=outline_color)
             draw_text(master_screen, f"Anim state: {p_anim.state}", (0, 0,),  outline_color=outline_color)
