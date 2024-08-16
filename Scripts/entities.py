@@ -305,7 +305,7 @@ class CollisionResolver(Ecs.BaseSystem):
                 if tile["type"] in FALLTRHOGH_TILES:  # wenn spieler nicht mehr mit fallthrough collided, dann kann man aus machen.
                     collided_with_fall_trough = True
                 if frame_movement[1] > 0:  # downards
-                    if tile["type"] in FALLTRHOGH_TILES and transform.falling_through:
+                    if tile["type"] in FALLTRHOGH_TILES and transform.falling_through or (tile["type"] in FALLTRHOGH_TILES and (rect.y - rect.h/2) - transform.pos.y < 1):  # durch droppen mit key input
                         pass
                     else:
                         entity_rect.bottom = rect.top

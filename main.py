@@ -186,7 +186,6 @@ class Game:
                 "debug_tiles": "yellow",
             }
             systems_ret = self.system_manager.run_all_systems(**system_args)
-            print(systems_ret)
             if systems_ret[CollisionResolver][self.collision_resolver_sys][self.p]["collisions"]["down"]:
                 reached_max_jump = False
 
@@ -197,7 +196,7 @@ class Game:
                     c = c2
                     if tile["type"] == "decor":
                         c = c1
-                    pygame.draw.rect(screen, c, Rect(tile["pos"][0] * 16 - self.scroll[0], tile["pos"][1] * 16 - self.scroll[1], 16, 16))
+                    pygame.draw.rect(screen, c, Rect(tile["pos"][0] * 16 - self.scroll[0], tile["pos"][1] * 16 - self.scroll[1], 16, 16), width=0)
 
             # region Events
             keys = pygame.key.get_pressed()
