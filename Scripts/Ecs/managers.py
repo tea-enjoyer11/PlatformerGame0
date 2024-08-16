@@ -103,18 +103,17 @@ class SystemManager:
         for sys in ExtendedSystem.__subclasses__():
             self.ret[sys] = {}
 
-    def add_system(self, entity: Entity, system: BaseSystem) -> None:
-        if system not in self._systems:
-            self._systems[system] = set()
-        self._systems[system].add(hash(entity))
-
-    def init_systems(self) -> None:
         BaseSystem.entity_manager = self.entity_manager
         BaseSystem.component_manager = self.component_manager
         BaseSystem.system_manager = self
         ExtendedSystem.entity_manager = self.entity_manager
         ExtendedSystem.component_manager = self.component_manager
         ExtendedSystem.system_manager = self
+
+    def add_system(self, entity: Entity, system: BaseSystem) -> None:
+        if system not in self._systems:
+            self._systems[system] = set()
+        self._systems[system].add(hash(entity))
 
     def add_extended_system(self, entity: Entity, system: ExtendedSystem) -> None:
         if system not in self._extended_systems:
