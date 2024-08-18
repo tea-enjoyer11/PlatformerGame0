@@ -278,7 +278,7 @@ class CollisionResolver(Ecs.BaseSystem):
         collided_with_fall_trough = False
         transform.x += frame_movement[0]
         entity_rect = transform.frect
-        for rect, tile in zip(tilemap.physics_rects_around(transform.pos), tilemap.get_around(transform.pos)):
+        for rect, tile in zip(tilemap.physics_rects_around(transform.pos), tilemap.get_around(transform.pos, ignore={"decor"})):
             if entity_rect.colliderect(rect):
                 return_data["coll_tiles"].append(tile)
                 if tile["type"] in FALLTRHOGH_TILES:  # wenn spieler nicht mehr mit fallthrough collided, dann kann man aus machen.
@@ -301,13 +301,13 @@ class CollisionResolver(Ecs.BaseSystem):
 
         transform.y += frame_movement[1]
         entity_rect = transform.frect
-        for rect, tile in zip(tilemap.physics_rects_around(transform.pos), tilemap.get_around(transform.pos)):
+        for rect, tile in zip(tilemap.physics_rects_around(transform.pos), tilemap.get_around(transform.pos, ignore={"decor"})):
             if entity_rect.colliderect(rect):
                 return_data["coll_tiles"].append(tile)
                 if tile["type"] in FALLTRHOGH_TILES:  # wenn spieler nicht mehr mit fallthrough collided, dann kann man aus machen.
                     collided_with_fall_trough = True
                 if frame_movement[1] > 0:  # downards
-                    if tile["type"] in FALLTRHOGH_TILES and transform.falling_through or (tile["type"] in FALLTRHOGH_TILES and (rect.y - rect.h/2) - transform.pos.y < 1):  # durch droppen mit key input
+                    if tile["type"] in FALLTRHOGH_TILES and transform.falling_through or (tile["type"] in FALLTRHOGH_TILES and (rect.y - rect.h / 2) - transform.pos.y < 1):  # durch droppen mit key input
                         pass
                     else:
                         entity_rect.bottom = rect.top
@@ -336,7 +336,6 @@ class CollisionResolver(Ecs.BaseSystem):
             for r in tilemap.physics_rects_around(transform.pos):
                 pygame.draw.rect(screen, kwargs["debug_tiles"], Rect(r.x - scroll[0], r.y - scroll[1], r.w, r.h), 1)
 
-        # print(tilemap.get_around(transform.pos))
         return_data["collisions"] = collisions
         return return_data
 
@@ -458,7 +457,7 @@ class EnemyCollisionResolver(Ecs.BaseSystem):
             if entity_rect.colliderect(rect):
                 return_data["coll_tiles"].append(tile)
                 if frame_movement[1] > 0:  # downards
-                    if tile["type"] in FALLTRHOGH_TILES and transform.falling_through or (tile["type"] in FALLTRHOGH_TILES and (rect.y - rect.h/2) - transform.pos.y < 1):  # durch droppen mit key input
+                    if tile["type"] in FALLTRHOGH_TILES and transform.falling_through or (tile["type"] in FALLTRHOGH_TILES and (rect.y - rect.h / 2) - transform.pos.y < 1):  # durch droppen mit key input
                         pass
                     else:
                         entity_rect.bottom = rect.top
@@ -488,7 +487,7 @@ class EnemyCollisionResolver(Ecs.BaseSystem):
 
 
 def skalar(p1, p2):
-    return (p1[0]*p2[0] + p1[1]*p2[1])
+    return (p1[0] * p2[0] + p1[1] * p2[1])
 
 
 class Ray:
@@ -506,8 +505,8 @@ class Ray:
         # t = Dot(c - a, ab) / Dot(ab, ab)
         # point = a + t * ab
 
-        t = skalar(c - a, b - a) / skalar(b-a, b-a)
-        point = a + t * (b-a)
+        t = skalar(c - a, b - a) / skalar(b - a, b - a)
+        point = a + t * (b - a)
 
         d = dist(point, pos)
         # print(a, b, c, self.direction, point, pos, t, d)
@@ -591,8 +590,8 @@ class EnemyPathFinderWalker(Ecs.BaseSystem):
             b = self.target_point
             t = self.charge / self.charge_duration
             t = easings.ease_in_circ(t)
-            c = (a[0] + (b[0]-a[0])*t, a[1] + (b[1]-a[1])*t)
-            pygame.draw.line(kwargs["surface"], (0, 255, 0), (a[0] - scroll[0], a[1] - scroll[1]), (c[0] - scroll[0], c[1]-scroll[1]), 1)
+            c = (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
+            pygame.draw.line(kwargs["surface"], (0, 255, 0), (a[0] - scroll[0], a[1] - scroll[1]), (c[0] - scroll[0], c[1] - scroll[1]), 1)
 
         if "debug_pathfinder" in kwargs:
             scroll = kwargs["scroll"]

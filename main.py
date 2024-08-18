@@ -222,7 +222,7 @@ class Game:
             keys = pygame.key.get_pressed()
             if keys[pygame.K_SPACE] and not reached_max_jump:
                 jump = True
-                p_velocity.y -= self.jumpforce / (400-p_velocity.y)
+                p_velocity.y -= self.jumpforce / (400 - p_velocity.y)
                 if p_velocity.y <= -400:
                     reached_max_jump = True
 
@@ -356,7 +356,7 @@ class Game:
             draw_text(master_screen, f"{self.player_movement[0]:.2f}, {self.player_movement[1]:.2f}, {p_velocity.xy}", (0, 200), outline_color=outline_color)
             draw_text(master_screen, f"TILEPOS: {p_transform.pos // TILESIZE}\nPOS:{p_transform.pos}\nNOCLIP: {self.noclip}", (500, 50), outline_color=outline_color)
             draw_text(master_screen, f"PARTICLES:\nAmount of Particles: {len(self.particle_group)}", (500, 250), outline_color=outline_color)
-            draw_text(master_screen, f"Anim state: {p_anim.state}", (0, 0,),  outline_color=outline_color)
+            draw_text(master_screen, f"Anim state: {p_anim.state}", (0, 0,), outline_color=outline_color)
 
             self.pygame_gui_manager.draw_ui(master_screen)
 

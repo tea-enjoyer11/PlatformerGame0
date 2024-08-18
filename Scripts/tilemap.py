@@ -47,13 +47,15 @@ class TileMap:
 
         return matches
 
-    def get_around(self, pos):
+    def get_around(self, pos, ignore: set[str] = set()):
         tiles = []
         tile_loc = (int(pos[0] // self.tile_size), int(pos[1] // self.tile_size))
         for offset in NEIGHBOR_OFFSETS:
             check_loc = str(tile_loc[0] + offset[0]) + ';' + str(tile_loc[1] + offset[1])
             if check_loc in self.tilemap:
-                tiles.append(self.tilemap[check_loc])
+                t = self.tilemap[check_loc]
+                if t["type"] not in ignore:
+                    tiles.append(t)
         return tiles
 
     def get_tile(self, pos, convert_to_tilespace=False):
