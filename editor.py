@@ -2,7 +2,7 @@ import sys
 
 import pygame
 
-from Scripts.utils import load_images
+from Scripts.utils import load_images, load_image
 from Scripts.tilemap import TileMap
 
 RENDER_SCALE = 2.0
@@ -25,6 +25,8 @@ class Editor:
             'stone': load_images('assets/tiles/stone'),
             "bridge": load_images("assets/tiles/bridge"),
             'spawners': load_images('assets/tiles/spawners'),
+            "grass_blades_cover": [load_image("assets/tiles/blades_cover.png")],
+            "grass_blades": load_images("assets/tiles/grass_blades"),
         }
 
         self.movement = [False, False, False, False]

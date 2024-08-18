@@ -340,125 +340,6 @@ class CollisionResolver(Ecs.BaseSystem):
         return return_data
 
 
-class CardData(Ecs.BaseComponent):
-    def __init__(self, game, type) -> None:
-        super().__init__()
-
-        self.game = game
-        self.type = type
-        self.data: dict[str, object] = {}
-        self.image = self.game.assets["cards"][self.type]
-
-
-class CardManager(Ecs.ExtendedSystem):
-    def __init__(self, game) -> None:
-        super().__init__([Transform, CardData])
-        self.game = game
-
-        self.cards: List[Ecs.Entity] = []
-        self.last_selected_card = 0
-        self.selected_card = 0
-        self.animations: dict[int, dict] = {}
-        self.static: dict[int, int] = {}
-
-    def __len__(self) -> int: return len(self.cards)
-
-    def scroll(self, y):
-        self.last_selected_card = self.selected_card
-        self.selected_card = (self.selected_card + y) % len(self.cards)
-        self.animate_card(self.last_selected_card, "down", 0.3)
-        self.animate_card(self.selected_card, "up", 0.3)
-
-    def add_card(self, c):
-        self.cards.append(c)
-        i = len(self.cards) - 1
-        self.animate_card(i, "down", 0.3)
-        if len(self.cards) == 1:
-            self.scroll(1)
-
-    def remove_card(self):
-        if not self.cards:
-            return
-        e = self.cards.pop(0)
-        if 0 in self.animations:
-            del self.animations[0]
-        if 0 in self.static:
-            del self.static[0]
-
-        a = self.selected_card
-        self.selected_card = clamp(0, self.selected_card-1, len(self.cards)-1)
-        if a == 0 and self.selected_card == 0 and self.cards:
-            self.animate_card(0, "up", 0.3)
-
-        l = []
-        for id in self.animations:
-            if id:
-                l.append(id)
-        self.animations = {(i-1 if i in l else i): d for i, d in self.animations.items()}
-        l.clear()
-        for id in self.static:
-            if id:
-                l.append(id)
-        self.static = {(i-1 if i in l else i): d for i, d in self.static.items()}
-        return e
-
-    def animate_card(self, id, direction, duration):
-        dir = 20 if direction == "down" else -20
-        self.animations[id] = {"direction": dir,
-                               "duration": duration,
-                               "start_time": time.time(),
-                               "time": time.time()}
-        if id in self.static:
-            del self.static[id]
-
-    def animate(self, id, dt) -> int:
-        if id not in self.animations:
-            return self.static[id]
-        self.animations[id]["time"] += dt
-        passed_time = min(self.animations[id]["time"] - self.animations[id]["start_time"], self.animations[id]["duration"])
-        t = passed_time / self.animations[id]["duration"]
-        ret = self.animations[id]["direction"] * easings.ease_linear(t)  # / data["direction"]
-
-        if passed_time == self.animations[id]["duration"]:
-            del self.animations[id]
-            self.static[id] = ret
-
-        return ret
-
-    def update_entities(self, entites_data: dict[Entity, dict[type[BaseComponent], BaseComponent]], **kwargs) -> None:
-        dt = kwargs["dt"]
-        print(self.animations, self.static, entites_data)
-
-        bar_middle_pos = (DOWNSCALED_RES.x / 2, DOWNSCALED_RES.y - 75)
-        card_size = (48 * 0.8, 67)
-        n_entities = len(self.cards)
-        total_shift = n_entities * card_size[0] / 2
-        a = -3
-        b = int(n_entities / 2)
-        c = bar_middle_pos[1]
-        for i, (entity, entity_components) in enumerate(entites_data.items()):
-            transform: Transform = entity_components[Transform]
-
-            transform.pos = (
-                bar_middle_pos[0] + card_size[0] * i - total_shift,
-                -a * (i - b) ** 2 + c + self.animate(i, dt)
-            )
-
-
-class CardRenderer(Ecs.ExtendedSystem):
-    def __init__(self, screen: Surface) -> None:
-        super().__init__([CardData, Transform])
-        self.screen = screen
-
-    def update_entities(self, entites_data: dict[Entity, dict[type[BaseComponent], BaseComponent]], **kwargs) -> None:
-        fblits = []
-        for i, (entity, entity_components) in enumerate(entites_data.items()):
-            transform: Transform = entity_components[Transform]
-            card: CardData = entity_components[CardData]
-            fblits.append((card.image, transform.pos))
-        self.screen.fblits(fblits)
-
-
 class EnemyCollisionResolver(Ecs.BaseSystem):
     def __init__(self, enemypathfinder) -> None:
         super().__init__([Transform, Velocity])
@@ -656,3 +537,10 @@ class EnemyPathFinderWalker(Ecs.BaseSystem):
                     pygame.draw.circle(kwargs["surface"], (255, 0, 0), (self.target_point[0] - scroll[0], self.target_point[1] - scroll[1]), 3)
 
         return player_hit
+
+
+class Item(Ecs.BaseComponent):
+    def __init__(self, game) -> None:
+        super().__init__()
+
+        self.game = game

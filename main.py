@@ -4,6 +4,7 @@ import pygame_gui.ui_manager
 import random
 import pygame
 import os
+import math
 
 from Scripts.tilemap import TileMap
 from Scripts.CONFIG import *
@@ -11,10 +12,13 @@ from Scripts.utils import load_image, draw_text, random_color, make_surface, loa
 from Scripts.particles import ParticleGroup, ImageCache, CircleParticle, LeafParticle
 from Scripts.timer import TimerManager
 
-from Scripts.entities import Transform, Image, ImageRenderer, Velocity, CollisionResolver, Animation, AnimationRenderer, AnimationUpdater, CardData, CardRenderer, EnemyPathFinderWalker, EnemyCollisionResolver, CardManager
+from Scripts.entities import Transform, Velocity, CollisionResolver, Animation, AnimationRenderer, AnimationUpdater, EnemyPathFinderWalker, EnemyCollisionResolver
 import Scripts.Ecs as Ecs
 
 os.environ['SDL_VIDEO_CENTERED'] = '1'
+
+pygame.init()
+pygame.font.init()
 
 
 class Game:
@@ -41,7 +45,6 @@ class Game:
         p_anim = Animation("assets/entities/player/config.json")
         self.component_manager.add_component(self.p, [
             Transform(200, 30, 5, 15),
-            Image(make_surface((5, 16), color=(255, 255, 125))),
             Velocity(250, 250),
             p_anim
         ])
@@ -51,7 +54,6 @@ class Game:
         self.system_manager.add_system(self.p, self.collision_resolver_sys)
         self.animation_updater_sys = AnimationUpdater()
         self.system_manager.add_system(self.p, self.animation_updater_sys)
-        self.card_renderer = CardRenderer(screen)
 
         # region Slider setup
         self.gravity_slider = pygame_gui.elements.UIHorizontalSlider(relative_rect=pygame.Rect(210, 500, 500, 30),
@@ -111,26 +113,13 @@ class Game:
                 # "timeshift": load_image("assets/cards/timeshift.png"),
                 # "boomerang": load_image("assets/cards/boomerang.png"),
             },
+            "grass_blades_cover": [load_image("assets/tiles/blades_cover.png")],
+            "grass_blades": load_images("assets/tiles/grass_blades"),
         }
 
-        self.card_manager = CardManager(self)
         self.scroll = Vector2(0)
 
-    def add_card(self):
-        e = self.entity_manager.add_entity()
-        card_size = (48, 67)
-        self.component_manager.add_component(e, [
-            Transform(DOWNSCALED_RES.x / 2, DOWNSCALED_RES.y / 2, *card_size),
-            CardData(self, random.choice(list(self.assets["cards"])))
-        ])
-        self.system_manager.add_extended_system(e, self.card_manager)
-        self.system_manager.add_extended_system(e, self.card_renderer)
-        self.card_manager.add_card(e)
-
-    def remove_card(self):
-        e = self.card_manager.remove_card()
-        if e:
-            self.entity_manager.remove_entity(e)
+        self.tile_map.init_grass()
 
     def run(self):
         right = False
@@ -160,14 +149,22 @@ class Game:
         self.system_manager.add_system(enemy, enemy_path_finder_walker)
         self.system_manager.add_system(enemy, enemy_coll_resolver)
 
+        master_time = 0
+
         while run__:
             jump = False
             dt = mainClock.tick(self.fps_options[self.fps_idx]) * 0.001 * self.dt_multiplicator
+            master_time += dt * 100
             TimerManager.update()
             # self.scroll += ((self.player.pos - Vector2(4, 4)) - RES / 4 / 2 - self.scroll) / 30
             # scroll += ((self.p.pos - Vector2(TILESIZE / 2)) - DOWNSCALED_RES / 2 - scroll) / 30
             self.scroll += ((self.component_manager.get_component(self.p, Transform).pos - Vector2(TILESIZE / 2)) - DOWNSCALED_RES / 2 - self.scroll) / 30
             screen.fill((0, 0, 0))
+
+            def rot_function(x) -> int: return int(math.sin(master_time / 60 + x / 100) * 15)
+            # def rot_function(x): return 1
+            self.tile_map.rotate_grass(rot_function=rot_function)
+            self.tile_map.update_grass(p_transform.rect)
 
             if right:
                 self.player_movement[0] = 1
@@ -198,8 +195,8 @@ class Game:
                 "max_gravity": self.max_gravity,
                 "player_entity": self.p,
                 "drop_through": drop_trough,
-                "debug_animation": "red",
-                "debug_tiles": "yellow",
+                # "debug_animation": "red",
+                # "debug_tiles": "yellow",
                 # "debug_pathfinder": (255, 0, 255),
                 "surface": screen,  # eig. nicht gut das so zu machen oder etwa doch ??
             }
@@ -209,28 +206,30 @@ class Game:
             if systems_ret[CollisionResolver][self.collision_resolver_sys][self.p]["collisions"]["down"]:
                 reached_max_jump = False
 
-            if (tiles := systems_ret[CollisionResolver][self.collision_resolver_sys][self.p]["coll_tiles"]):
-                c1 = (0, 0, 255)
-                c2 = (0, 255, 255)
-                for tile in tiles:
-                    c = c2
-                    if tile["type"] == "decor":
-                        c = c1
-                    pygame.draw.rect(screen, c, Rect(tile["pos"][0] * 16 - self.scroll[0], tile["pos"][1] * 16 - self.scroll[1], 16, 16), width=0)
+            # if (tiles := systems_ret[CollisionResolver][self.collision_resolver_sys][self.p]["coll_tiles"]):
+            #     c1 = (0, 0, 255)
+            #     c2 = (0, 255, 255)
+            #     for tile in tiles:
+            #         c = c2
+            #         if tile["type"] == "decor":
+            #             c = c1
+            #         pygame.draw.rect(screen, c, Rect(tile["pos"][0] * 16 - self.scroll[0], tile["pos"][1] * 16 - self.scroll[1], 16, 16), width=0)
 
             # region Events
             keys = pygame.key.get_pressed()
             if keys[pygame.K_SPACE] and not reached_max_jump:
                 jump = True
+                # p_velocity.y -= (self.jumpforce / (1+p_velocity.y))  # * dt
                 p_velocity.y -= self.jumpforce / (400 - p_velocity.y)
+                # 1 - 1/x
+                # p_velocity.y -= self.jumpforce * dt
+                # p_velocity.y -= (14 - 1 / (p_velocity.y + 10))
                 if p_velocity.y <= -400:
                     reached_max_jump = True
 
             for event in pygame.event.get():
                 if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
                     run__ = False
-                if event.type == pygame.MOUSEWHEEL:
-                    self.card_manager.scroll(event.y)
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_d:
                         right = True
@@ -241,9 +240,11 @@ class Game:
                     if event.key == pygame.K_s:
                         down = True
                     if event.key == pygame.K_e:
-                        self.add_card()
+                        # pickup
+                        pass
                     if event.key == pygame.K_q:
-                        self.remove_card()
+                        # drop
+                        pass
                     if event.key == pygame.K_TAB:
                         self.noclip = not self.noclip
                         p_velocity.y = 0
@@ -348,7 +349,6 @@ class Game:
             master_screen.blit(pygame.transform.scale(screen, RES), (0, 0))
 
             outline_color = None
-            draw_text(master_screen, f"Cards: {len(self.card_manager)} Index: {self.card_manager.selected_card}", (0, 40), outline_color=outline_color)
             draw_text(master_screen, f"DT: {dt:.6f} DT multiplier:{self.dt_multiplicator:.4f}", (0, 80), outline_color=outline_color)
             draw_text(master_screen, f"{mainClock.get_fps():.0f}", (500, 0), outline_color=outline_color)
             draw_text(master_screen, f"{self.player_movement[0]:.2f}, {self.player_movement[1]:.2f}, {p_velocity.xy}", (0, 200), outline_color=outline_color)
