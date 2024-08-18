@@ -9,6 +9,8 @@ class EntityManager:
                  "component_manager",
                  "_entities_to_remove_next_frame")
 
+    system_manager: "SystemManager" = None
+
     def __init__(self, component_manager: "ComponentManager") -> None:
         self.component_manager = component_manager
         self._count = 0
@@ -23,6 +25,7 @@ class EntityManager:
 
     def remove_entity(self, entity: Entity) -> None:
         self._entities_to_remove_next_frame.add(hash(entity))
+        self.system_manager._remove_all_entities()
 
     def final_remove(self) -> set[int]:
         if self._entities_to_remove_next_frame:
@@ -110,6 +113,8 @@ class SystemManager:
         ExtendedSystem.component_manager = self.component_manager
         ExtendedSystem.system_manager = self
 
+        EntityManager.system_manager = self
+
     def add_system(self, entity: Entity, system: BaseSystem) -> None:
         if system not in self._systems:
             self._systems[system] = set()
@@ -140,7 +145,7 @@ class SystemManager:
 
         # print(f"To run all systems it took: {time.time() - t0:.4f} seconds. (BaseSystem: {t1 - t0:.7f} sec. ExtendedSystem: {time.time() - t1:.7f})")
 
-        self._remove_all_entities()
+        # self._remove_all_entities()
         self._systems_ran_already.clear()
         self._extended_systems_ran_already.clear()
 

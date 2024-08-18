@@ -11,7 +11,7 @@ from Scripts.utils import load_image, draw_text, random_color, make_surface, loa
 from Scripts.particles import ParticleGroup, ImageCache, CircleParticle, LeafParticle
 from Scripts.timer import TimerManager
 
-from Scripts.entities import Transform, Image, ImageRenderer, Velocity, CollisionResolver, Animation, AnimationRenderer, AnimationUpdater, CardData, CardRenderer, EnemyPathFinderWalker, EnemyCollisionResolver
+from Scripts.entities import Transform, Image, ImageRenderer, Velocity, CollisionResolver, Animation, AnimationRenderer, AnimationUpdater, CardData, CardRenderer, EnemyPathFinderWalker, EnemyCollisionResolver, CardManager
 import Scripts.Ecs as Ecs
 
 os.environ['SDL_VIDEO_CENTERED'] = '1'
@@ -100,21 +100,20 @@ class Game:
             "bridge": load_images("assets/tiles/bridge"),
             "cards": {
                 "dash": load_image("assets/cards/dash.png"),
-                "invisibility": load_image("assets/cards/invisibility.png"),
-                "clone": load_image("assets/cards/clone.png"),
-                "grapple": load_image("assets/cards/grapple.png"),
-                "health_swap": load_image("assets/cards/health_swap.png"),
-                "health": load_image("assets/cards/health.png"),
-                "shield": load_image("assets/cards/shield.png"),
                 "knifes": load_image("assets/cards/knifes.png"),
-                "lightning": load_image("assets/cards/lightning.png"),
-                "timeshift": load_image("assets/cards/timeshift.png"),
-                "boomerang": load_image("assets/cards/boomerang.png"),
+                # "invisibility": load_image("assets/cards/invisibility.png"),
+                # "clone": load_image("assets/cards/clone.png"),
+                # "grapple": load_image("assets/cards/grapple.png"),
+                # "health_swap": load_image("assets/cards/health_swap.png"),
+                # "health": load_image("assets/cards/health.png"),
+                # "shield": load_image("assets/cards/shield.png"),
+                # "lightning": load_image("assets/cards/lightning.png"),
+                # "timeshift": load_image("assets/cards/timeshift.png"),
+                # "boomerang": load_image("assets/cards/boomerang.png"),
             },
         }
 
-        self.cards = []
-        self.card_index = 0
+        self.card_manager = CardManager(self)
         self.scroll = Vector2(0)
 
     def add_card(self):
@@ -122,14 +121,15 @@ class Game:
         card_size = (48, 67)
         self.component_manager.add_component(e, [
             Transform(DOWNSCALED_RES.x / 2, DOWNSCALED_RES.y / 2, *card_size),
-            CardData(self.assets["cards"][random.choice(list(self.assets["cards"]))])
+            CardData(self, random.choice(list(self.assets["cards"])))
         ])
+        self.system_manager.add_extended_system(e, self.card_manager)
         self.system_manager.add_extended_system(e, self.card_renderer)
-        self.cards.append(e)
+        self.card_manager.add_card(e)
 
     def remove_card(self):
-        if self.cards:
-            e = self.cards.pop()
+        e = self.card_manager.remove_card()
+        if e:
             self.entity_manager.remove_entity(e)
 
     def run(self):
@@ -230,9 +230,7 @@ class Game:
                 if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
                     run__ = False
                 if event.type == pygame.MOUSEWHEEL:
-                    if self.cards:
-                        self.card_index = (self.card_index + event.y) % len(self.cards)
-                        self.card_renderer.selected_card = self.card_index
+                    self.card_manager.scroll(event.y)
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_d:
                         right = True
@@ -350,7 +348,7 @@ class Game:
             master_screen.blit(pygame.transform.scale(screen, RES), (0, 0))
 
             outline_color = None
-            draw_text(master_screen, f"Cards: {len(self.cards)} Index: {self.card_index}", (0, 40), outline_color=outline_color)
+            draw_text(master_screen, f"Cards: {len(self.card_manager)} Index: {self.card_manager.selected_card}", (0, 40), outline_color=outline_color)
             draw_text(master_screen, f"DT: {dt:.6f} DT multiplier:{self.dt_multiplicator:.4f}", (0, 80), outline_color=outline_color)
             draw_text(master_screen, f"{mainClock.get_fps():.0f}", (500, 0), outline_color=outline_color)
             draw_text(master_screen, f"{self.player_movement[0]:.2f}, {self.player_movement[1]:.2f}, {p_velocity.xy}", (0, 200), outline_color=outline_color)
@@ -358,7 +356,7 @@ class Game:
             draw_text(master_screen, f"PARTICLES:\nAmount of Particles: {len(self.particle_group)}", (500, 250), outline_color=outline_color)
             draw_text(master_screen, f"Anim state: {p_anim.state}", (0, 0,), outline_color=outline_color)
 
-            self.pygame_gui_manager.draw_ui(master_screen)
+            # self.pygame_gui_manager.draw_ui(master_screen)
 
             pygame.display.flip()
 
