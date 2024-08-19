@@ -1,10 +1,12 @@
+from cachetools import cached, LRUCache
+from cachetools.keys import hashkey
 import functools
 import json
 
 import pygame
 import random
 
-from Scripts.utils_math import clamp_number_to_range_steps
+from Scripts.utils_math import clamp_number_to_range_steps, dist
 
 AUTOTILE_MAP = {
     tuple(sorted([(1, 0), (0, 1)])): 0,
@@ -30,6 +32,7 @@ class TileMap:
         self.tile_size = tile_size
         self.tilemap = {}
         self.offgrid_tiles = []
+        self.grass_blades = {}
 
     def extract(self, id_pairs, keep=False):
         matches = []
@@ -58,7 +61,10 @@ class TileMap:
             if tile["type"] == "grass_blades_cover":
                 grass.append(tile)
 
-        offsets = {0: 4, 1: 11, 2: 5, 3: 4, 4: 8, 5: 7, 6: 6}
+        # anstatt manuell zu definieren → offsets = {0: 4, 1: 11, 2: 5, 3: 4, 4: 8, 5: 7, 6: 6}
+        offsets = {i: 19 - img.get_height() // 2 for i, img in enumerate(self.game.assets["grass_blades"])}
+        widths = {i: img.get_width() for i, img in enumerate(self.game.assets["grass_blades"])}
+        print(offsets)
         for grass_tile in grass:
             pos = tuple(grass_tile["pos"])
             del self.tilemap[f"{pos[0]};{pos[1]}"]
@@ -73,21 +79,43 @@ class TileMap:
                 )
                 blades.append((p, variant))
 
+            grass_patch = {"pos": grass_tile["pos"], "type": "grass_patch", "blades": []}
             for bpos in blades:
-                self.offgrid_tiles.append({"type": "grass_blades",
-                                           "variant": bpos[1],
-                                           "pos": list(bpos[0]),
-                                           "angle": 0.0})
+                grass_patch["blades"].append({"type": "grass_blades",
+                                              "variant": bpos[1],
+                                              "pos": list(bpos[0]),
+                                              "angle": 0.0,
+                                              "width": widths[bpos[1]]})
 
-            # make blades interactable.
+            self.grass_blades[f"{pos[0]};{pos[1]}"] = grass_patch
 
-    def update_grass(self, entity_rect: pygame.FRect):
+    def update_grass(self, entity_rect: pygame.FRect, force_radius, force_dropoff):
         # TODO
-        # einzelne blades müssen zusammen gepackt werden,
-        # damit lookup times nicht durch die Decke gehen.
+        # einzelne blades müssen zusammen gepackt werden, damit lookup times nicht durch die Decke gehen.
         # Am besten alle blades in einem Tile gruppieren.
         # Dann vllt auch die mögliche state vom tile cachen??
-        ...
+        patches = []
+        pos = entity_rect.center
+        tile_loc = (int(pos[0] // self.tile_size), int(pos[1] // self.tile_size))
+        for offset in NEIGHBOR_OFFSETS:
+            check_loc = str(tile_loc[0] + offset[0]) + ';' + str(tile_loc[1] + offset[1])
+            if check_loc in self.grass_blades:
+                patches.append(self.grass_blades[check_loc])
+
+        for patch in patches:
+            for blade in patch["blades"]:
+                org_rot = blade["angle"]
+                dis = dist(blade["pos"], pos)
+                if dis < force_radius:
+                    force = 2
+                else:
+                    dis = max(0, dis - force_radius)
+                    force = 1 - min(dis / force_dropoff, 1)
+                dir = -1 if pos[0] < blade["pos"][0] else 1
+                # dont update unless force is stronger
+                if blade["angle"] < force * 90:
+                    blade["angle"] = min(max(dir * force * 90 + org_rot * 0.5, -90), 90)
+                    clamp_number_to_range_steps(blade["angle"], -90, 90, 180/MAX_GRASS_STEPS)
 
     def get_around(self, pos, ignore: set[str] = set()):
         tiles = []
@@ -156,21 +184,15 @@ class TileMap:
                 tile['variant'] = AUTOTILE_MAP[neighbors]
 
     def rotate_grass(self, rot_function):
-        for tile in self.offgrid_tiles:
-            if tile["type"] != "grass_blades":
-                continue
-            tile["angle"] = rot_function(tile["pos"][0])
-            tile["angle"] = clamp_number_to_range_steps(tile["angle"], -90, 90, 180/MAX_GRASS_STEPS)
-            print(tile["angle"], make_rot.cache_info())
+        for _, patch in self.grass_blades.items():
+            for tile in patch["blades"]:
+                tile["angle"] = rot_function(tile["pos"][0])
+                tile["angle"] = clamp_number_to_range_steps(tile["angle"], -90, 90, 180/MAX_GRASS_STEPS)
+                # print(tile["angle"], make_rot.cache_info())
 
     def render(self, surf, offset=(0, 0)):
         for tile in self.offgrid_tiles:
-            if tile["type"] == "grass_blades":
-                # blit from center
-                img, rect = make_rot(self.game, tile["variant"], tile["angle"], tuple(tile["pos"]))
-                surf.blit(img, (rect.x - offset[0], rect.y - offset[1]))
-            else:
-                surf.blit(self.game.assets[tile['type']][tile['variant']], (tile['pos'][0] - offset[0], tile['pos'][1] - offset[1]))
+            surf.blit(self.game.assets[tile['type']][tile['variant']], (tile['pos'][0] - offset[0], tile['pos'][1] - offset[1]))
 
         for x in range(int(offset[0] // self.tile_size), int((offset[0] + surf.get_width()) // self.tile_size + 1)):
             for y in range(int(offset[1] // self.tile_size), int((offset[1] + surf.get_height()) // self.tile_size + 1)):
@@ -179,16 +201,26 @@ class TileMap:
                     tile = self.tilemap[loc]
                     surf.blit(self.game.assets[tile['type']][tile['variant']], (tile['pos'][0] * self.tile_size - offset[0], tile['pos'][1] * self.tile_size - offset[1]))
 
+        for _, grass_patch in self.grass_blades.items():
+            for tile in grass_patch["blades"]:
+                # img, rect = make_rot(self.game, tile["variant"], tile["angle"], tuple(tile["pos"]))
+                # t_pos = (int(_.split(";")[0]), int(_.split(";")[1]))
+                a = make_rot(self.game, tile["variant"], tile["angle"], tuple(tile["pos"]))
+                img, rect = a
+                surf.blit(img, (rect.x - offset[0], rect.y - offset[1]))
+
 
 MAX_GRASS_STEPS = 25
 
 
 @functools.lru_cache(maxsize=None)
-def make_rot(game, variant, angle, pos) -> tuple[pygame.Surface, pygame.FRect]:
+# @cached(cache={}, key=lambda game, variant, angle, b_pos, t_pos: hashkey(variant, angle, t_pos))
+def make_rot(game, variant, angle, b_pos) -> tuple[pygame.Surface, pygame.FRect]:
     org_image: pygame.Surface = game.assets["grass_blades"][variant]
     org_rect = org_image.get_frect()
-    org_rect.topleft = pos
+    org_rect.topleft = b_pos
     rot_image = pygame.transform.rotate(org_image, angle)
     rot_rect = rot_image.get_frect(center=org_rect.center)
 
+    # print(org_rect, rot_rect)
     return (rot_image, rot_rect)

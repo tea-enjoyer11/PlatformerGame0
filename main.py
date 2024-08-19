@@ -164,7 +164,7 @@ class Game:
             def rot_function(x) -> int: return int(math.sin(master_time / 60 + x / 100) * 15)
             # def rot_function(x): return 1
             self.tile_map.rotate_grass(rot_function=rot_function)
-            self.tile_map.update_grass(p_transform.rect)
+            self.tile_map.update_grass(p_transform.rect, 1, 12)
 
             if right:
                 self.player_movement[0] = 1
