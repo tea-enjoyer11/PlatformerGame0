@@ -113,7 +113,7 @@ class Velocity(Ecs.BaseComponent, Vector2):
 
 
 class Animation(Ecs.BaseComponent):
-    def __init__(self, config_file_path: str) -> None:
+    def __init__(self, config_file_path: str, loaded_already=None) -> None:
         super().__init__()
         self.states: dict[str, list[Surface]] = {}
         self.states_looping: dict[str, bool] = {}
@@ -128,16 +128,22 @@ class Animation(Ecs.BaseComponent):
         self.flip = False
         self.last_index_update: float = .0
 
-        self.__parse_config(config_file_path)
+        self.__parse_config(config_file_path, loaded_already)
 
-    def __parse_config(self, path: str) -> None:
+    def __parse_config(self, path: str, loaded_already) -> None:
         with open(path, "r") as f:
             data = json.load(f)
 
             colorkey = data["colorkey"]
             default_path = data["file_path"]
+            same_dir = data["samedir"]
             for state, state_data in data["animations"].items():
-                self.states[state] = load_images(f"{default_path}/{state}", colorkey=colorkey)
+                if loaded_already:
+                    self.states[state] = loaded_already
+                elif same_dir:
+                    self.states[state] = load_images(default_path, colorkey=colorkey)
+                else:
+                    self.states[state] = load_images(f"{default_path}/{state}", colorkey=colorkey)
                 self.states_looping[state] = state_data["loop"]
                 self.states_frame_times[state] = state_data["frames"]
                 self.states_offset[state] = state_data["offset"]
@@ -184,10 +190,9 @@ class AnimationUpdater(Ecs.BaseSystem):
 
     def update_entity(self, entity: Ecs.Entity, entity_components: dict[type[Ecs.BaseComponent], Ecs.BaseComponent], **kwargs) -> None:
         anim: Animation = entity_components[Animation]
-        dt = kwargs["dt"]
-        movement = kwargs["movement"]
 
         if entity == kwargs["player_entity"]:
+            movement = kwargs["movement"]
             if movement[0] > 0:
                 anim.flip = False
             if movement[0] < 0:
@@ -544,3 +549,72 @@ class Item(Ecs.BaseComponent):
         super().__init__()
 
         self.game = game
+
+
+class ParticleSystemUpdater(Ecs.ExtendedSystem):
+    def __init__(self) -> None:
+        super().__init__([Transform, Velocity, Animation])
+
+    def update_entities(self, entites_data: dict[Entity, dict[type[BaseComponent], BaseComponent]], **kwargs) -> None:
+        to_remove: List[Ecs.Entity] = []
+        for entity, entity_components in entites_data.items():
+            velocity: Velocity = entity_components[Velocity]
+            transform: Transform = entity_components[Transform]
+            anim: Animation = entity_components[Animation]
+
+            tilemap = kwargs["tilemap"]
+            dt = kwargs["dt"]
+            frame_movement = (velocity.x * dt, velocity.y * dt)
+
+            collisions = {'up': False, 'down': False, 'right': False, 'left': False}
+
+            transform.x += frame_movement[0]
+            entity_rect = transform.frect
+            for rect, tile in zip(tilemap.physics_rects_around(transform.pos), tilemap.get_around(transform.pos, ignore={"decor"})):
+                if entity_rect.colliderect(rect):
+                    if frame_movement[0] > 0:  # right
+                        entity_rect.right = rect.left
+                        collisions['right'] = True
+                    if frame_movement[0] < 0:  # left
+                        entity_rect.left = rect.right
+                        collisions['left'] = True
+                    transform.x = entity_rect.x
+            transform.y += frame_movement[1]
+            entity_rect = transform.frect
+            for rect, tile in zip(tilemap.physics_rects_around(transform.pos), tilemap.get_around(transform.pos, ignore={"decor"})):
+                if entity_rect.colliderect(rect):
+                    if frame_movement[1] > 0:  # downards
+                        entity_rect.bottom = rect.top
+                        collisions['down'] = True
+                    if frame_movement[1] < 0:  # upwards
+                        entity_rect.top = rect.bottom
+                        collisions['up'] = True
+                    transform.y = entity_rect.y
+
+            gravity = kwargs["gravity"]
+            max_gravity = kwargs["max_gravity"]
+            velocity[1] = min(max_gravity/1, velocity[1] + gravity)
+
+            if collisions["down"]:
+                velocity.x *= 0.99 * dt * 0.01
+
+            if anim.over:
+                to_remove.append(entity)
+        return to_remove
+
+
+class ParticleSystemRenderer(Ecs.ExtendedSystem):
+    def __init__(self, screen: Surface) -> None:
+        super().__init__([Animation, Transform])
+        self.screen = screen
+
+    def update_entities(self, entites_data: dict[Entity, dict[type[BaseComponent], BaseComponent]], **kwargs) -> None:
+        fblits = []
+        for entity, entity_components in entites_data.items():
+            anim: Animation = entity_components[Animation]
+            transform: Transform = entity_components[Transform]
+
+            scroll = kwargs["scroll"]
+
+            fblits.append((anim.img(), (transform.x - scroll[0], transform.y - scroll[1])))
+        self.screen.fblits(fblits)

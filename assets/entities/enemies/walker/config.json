@@ -19,5 +19,6 @@
     "offset": [4, 10],
     "colorkey": [0, 148, 255],
     "size": [13, 24],
-    "default": "idle"
+    "default": "idle",
+    "samedir": false
 }

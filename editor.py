@@ -11,11 +11,13 @@ RENDER_SCALE = 2.0
 class Editor:
     def __init__(self):
         pygame.init()
+        pygame.font.init()
 
         pygame.display.set_caption('editor')
         self.screen = pygame.display.set_mode((640, 480))
         self.display = pygame.Surface((320, 240))
 
+        self.font = pygame.font.SysFont("arial", 16)
         self.clock = pygame.time.Clock()
 
         self.assets = {
@@ -48,6 +50,12 @@ class Editor:
         self.right_clicking = False
         self.shift = False
         self.ongrid = True
+        self.shift_layer = False
+        self.layer_int = 0
+        self.layer = "0"
+        self.toggle_view = False
+
+        self.toggle_controls = True
 
     def run(self):
         boost = False
@@ -58,7 +66,7 @@ class Editor:
             self.scroll[1] += (self.movement[3] - self.movement[2]) * 2 * (4 if boost else 1)
             render_scroll = (int(self.scroll[0]), int(self.scroll[1]))
 
-            self.tilemap.render(self.display, offset=render_scroll)
+            self.tilemap.render(self.display, offset=render_scroll, render_only=(self.layer if self.toggle_view else None))
 
             current_tile_img = self.assets[self.tile_list[self.tile_group]][self.tile_variant].copy()
             current_tile_img.set_alpha(100)
@@ -73,11 +81,11 @@ class Editor:
                 self.display.blit(current_tile_img, mpos)
 
             if self.clicking and self.ongrid:
-                self.tilemap.tilemap[str(tile_pos[0]) + ';' + str(tile_pos[1])] = {'type': self.tile_list[self.tile_group], 'variant': self.tile_variant, 'pos': tile_pos}
+                self.tilemap.tilemap[self.layer][str(tile_pos[0]) + ';' + str(tile_pos[1])] = {'type': self.tile_list[self.tile_group], 'variant': self.tile_variant, 'pos': tile_pos}
             if self.right_clicking:
                 tile_loc = str(tile_pos[0]) + ';' + str(tile_pos[1])
-                if tile_loc in self.tilemap.tilemap:
-                    del self.tilemap.tilemap[tile_loc]
+                if tile_loc in self.tilemap.tilemap[self.layer]:
+                    del self.tilemap.tilemap[self.layer][tile_loc]
                 for tile in self.tilemap.offgrid_tiles.copy():
                     tile_img = self.assets[tile['type']][tile['variant']]
                     tile_r = pygame.Rect(tile['pos'][0] - self.scroll[0], tile['pos'][1] - self.scroll[1], tile_img.get_width(), tile_img.get_height())
@@ -98,16 +106,23 @@ class Editor:
                             self.tilemap.offgrid_tiles.append({'type': self.tile_list[self.tile_group], 'variant': self.tile_variant, 'pos': (mpos[0] + self.scroll[0], mpos[1] + self.scroll[1])})
                     if event.button == 3:
                         self.right_clicking = True
-                    if self.shift:
+                    if self.shift_layer:
+                        if event.button == 4:  # scroll up
+                            self.layer_int = min(self.layer_int + 1, 3)
+                            self.layer = str(self.layer_int)
+                        elif event.button == 5:  # scroll down
+                            self.layer_int = max(self.layer_int - 1, -3)
+                            self.layer = str(self.layer_int)
+                    elif self.shift:
                         if event.button == 4:
                             self.tile_variant = (self.tile_variant - 1) % len(self.assets[self.tile_list[self.tile_group]])
-                        if event.button == 5:
+                        elif event.button == 5:
                             self.tile_variant = (self.tile_variant + 1) % len(self.assets[self.tile_list[self.tile_group]])
                     else:
                         if event.button == 4:
                             self.tile_group = (self.tile_group - 1) % len(self.tile_list)
                             self.tile_variant = 0
-                        if event.button == 5:
+                        elif event.button == 5:
                             self.tile_group = (self.tile_group + 1) % len(self.tile_list)
                             self.tile_variant = 0
                 if event.type == pygame.MOUSEBUTTONUP:
@@ -125,12 +140,10 @@ class Editor:
                         self.movement[2] = True
                     if event.key == pygame.K_s:
                         self.movement[3] = True
-                    if event.key == pygame.K_LCTRL:
-                        boost = True
                     if event.key == pygame.K_g:
                         self.ongrid = not self.ongrid
                     if event.key == pygame.K_t:
-                        self.tilemap.autotile()
+                        self.tilemap.autotile(self.layer)
                     if event.key == pygame.K_o:
                         self.tilemap.save('map.json')
                         print("saved tilemap")
@@ -142,6 +155,14 @@ class Editor:
                             print("File map.json was not found1")
                     if event.key == pygame.K_LSHIFT:
                         self.shift = True
+                    if event.key == pygame.K_LCTRL:
+                        boost = True
+                    if event.key == pygame.K_LALT:
+                        self.shift_layer = True
+                    if event.key == pygame.K_h:
+                        self.toggle_view = not self.toggle_view
+                    if event.key == pygame.K_z:
+                        self.toggle_controls = not self.toggle_controls
                 if event.type == pygame.KEYUP:
                     if event.key == pygame.K_a:
                         self.movement[0] = False
@@ -155,8 +176,20 @@ class Editor:
                         self.shift = False
                     if event.key == pygame.K_LCTRL:
                         boost = False
+                    if event.key == pygame.K_LALT:
+                        self.shift_layer = False
 
             self.screen.blit(pygame.transform.scale(self.display, self.screen.get_size()), (0, 0))
+
+            s = self.font.render(f"Layer: {self.layer}", True, (0, 255, 0), (0, 0, 0))
+            self.screen.blit(s, (self.screen.width - s.width, 0))
+
+            if self.toggle_controls:
+                s = self.font.render("--- Toggle Controls: Z ---\n\nmove: WASD\nboost: LCTRL\nplace/break: RMB/LMB\nchange tiles: MWHEEL\nchange tiles: MWHEEL + (LSHIFT)\nchange Layer: MWHEEL + (LALT)\nToggle view layer: H\nAutotile: T\ntoggle offgrid: G\nSave: O\nLoad: I", True, (0, 255, 0), (0, 0, 0))
+            else:
+                s = self.font.render("--- Toggle Controls: Z ---", True, (0, 255, 0), (0, 0, 0))
+            self.screen.blit(s, (self.screen.width - s.width, self.screen.height - s.height))
+
             pygame.display.update()
             self.clock.tick(60)
 

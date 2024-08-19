@@ -25,6 +25,8 @@ def load_image(path: str, flip_x: bool = False, flip_y: bool = False, colorkey: 
 def load_images(path: str, colorkey: Tuple = (0, 0, 0)) -> List[Surface]:
     images = []
     for img_name in sorted(os.listdir(path)):
+        if not img_name.endswith(".png"):
+            continue
         images.append(load_image(path + '/' + img_name, colorkey=colorkey))
     return images
 
@@ -183,6 +185,24 @@ def palette_sawp(image: Surface, org_pallet: List[Color], new_pallet: List[Color
         ret_copy.set_colorkey((0, 0, 0))
         ret = ret_copy
     return ret
+
+
+def pallete_swap_dir(images: List[Surface], org_pallet: List[Color], new_pallet: List[Color]) -> Surface:
+    """
+    Swapes color `n` from `org_pallet` with color `m` from `new_pallet`.
+    """
+    l = []
+    for image in images:
+        ret = image.copy()
+        for o_color, n_color in zip(org_pallet, new_pallet):
+            ret_copy = ret.copy()
+            ret_copy.fill(n_color)
+            ret.set_colorkey(o_color)
+            ret_copy.blit(ret, (0, 0))
+            ret_copy.set_colorkey((0, 0, 0))
+            ret = ret_copy
+        l.append(ret)
+    return l
 
 
 def circle_surf(radius: float, color: Color) -> Surface:

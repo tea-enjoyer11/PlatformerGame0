@@ -17,6 +17,8 @@ class EntityManager:
         self._entities: dict[int, Entity] = dict()
         self._entities_to_remove_next_frame: set[int] = set()
 
+    def __len__(self) -> int: return len(self._entities)
+
     def add_entity(self) -> Entity:
         entity = Entity(self._count)
         self._entities[hash(entity)] = entity
@@ -52,6 +54,8 @@ class ComponentManager:
         self._components: dict[typing.Type[BaseComponent], dict[Entity, ComponentInstanceType]] = dict()  # type: ignore
 
         self.__init_components()
+
+    def __len__(self) -> int: return len(self._components)
 
     def __init_components(self) -> None:
         for subclass in BaseComponent.__subclasses__():
@@ -114,6 +118,8 @@ class SystemManager:
         ExtendedSystem.system_manager = self
 
         EntityManager.system_manager = self
+
+    def __len__(self) -> int: return len(self._systems) + len(self._extended_systems)
 
     def add_system(self, entity: Entity, system: BaseSystem) -> None:
         if system not in self._systems:

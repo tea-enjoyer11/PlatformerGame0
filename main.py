@@ -8,11 +8,11 @@ import math
 
 from Scripts.tilemap import TileMap
 from Scripts.CONFIG import *
-from Scripts.utils import load_image, draw_text, random_color, make_surface, load_images
+from Scripts.utils import load_image, draw_text, random_color, make_surface, load_images, pallete_swap_dir
 from Scripts.particles import ParticleGroup, ImageCache, CircleParticle, LeafParticle
 from Scripts.timer import TimerManager
 
-from Scripts.entities import Transform, Velocity, CollisionResolver, Animation, AnimationRenderer, AnimationUpdater, EnemyPathFinderWalker, EnemyCollisionResolver
+from Scripts.entities import Transform, Velocity, CollisionResolver, Animation, AnimationRenderer, AnimationUpdater, EnemyPathFinderWalker, EnemyCollisionResolver, ParticleSystemRenderer, ParticleSystemUpdater
 import Scripts.Ecs as Ecs
 
 os.environ['SDL_VIDEO_CENTERED'] = '1'
@@ -115,11 +115,27 @@ class Game:
             },
             "grass_blades_cover": [load_image("assets/tiles/blades_cover.png")],
             "grass_blades": load_images("assets/tiles/grass_blades"),
+            "particles": {
+                "particle": pallete_swap_dir(load_images("assets/particles/particle"), [(255, 255, 255)], [(255, 0, 0)]),
+                "leaf": pallete_swap_dir(load_images("assets/particles/leaf"), [(255, 255, 255)], [(0, 255, 0)]),
+            }
         }
 
         self.scroll = Vector2(0)
 
         self.tile_map.init_grass()
+
+        self.particle_renderer = ParticleSystemRenderer(screen)
+        self.particle_updater = ParticleSystemUpdater()
+
+    def add_particle(self, type: str, rect, vel):
+        p = self.entity_manager.add_entity()
+        self.component_manager.add_component(p, [Animation(f"assets/particles/{type}/config.json", loaded_already=self.assets["particles"][type]),
+                                                 Velocity(*vel),
+                                                 Transform(rect.x, rect.y, rect.w, rect.h)])
+        self.system_manager.add_extended_system(p, self.particle_updater)
+        self.system_manager.add_extended_system(p, self.particle_renderer)
+        self.system_manager.add_system(p, self.animation_updater_sys)
 
     def run(self):
         right = False
@@ -164,7 +180,7 @@ class Game:
             def rot_function(x) -> int: return int(math.sin(master_time / 60 + x / 100) * 15)
             # def rot_function(x): return 1
             self.tile_map.rotate_grass(rot_function=rot_function)
-            self.tile_map.update_grass(p_transform.rect, 1, 12)
+            self.tile_map.update_grass(p_transform.rect, 1, 12, particle_method=self.add_particle)
 
             if right:
                 self.player_movement[0] = 1
@@ -201,10 +217,12 @@ class Game:
                 "surface": screen,  # eig. nicht gut das so zu machen oder etwa doch ??
             }
             systems_ret = self.system_manager.run_all_systems(**system_args)
-            walker_ret = self.system_manager.run_base_system(enemy_path_finder_walker, **system_args)
-            print("hit") if walker_ret[enemy] else None
+            print("hit") if systems_ret[EnemyPathFinderWalker][enemy_path_finder_walker][enemy] else None
             if systems_ret[CollisionResolver][self.collision_resolver_sys][self.p]["collisions"]["down"]:
                 reached_max_jump = False
+            if systems_ret[ParticleSystemUpdater]:
+                for e in systems_ret[ParticleSystemUpdater][self.particle_updater]:
+                    self.entity_manager.remove_entity(e)
 
             # if (tiles := systems_ret[CollisionResolver][self.collision_resolver_sys][self.p]["coll_tiles"]):
             #     c1 = (0, 0, 255)

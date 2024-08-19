@@ -24,7 +24,7 @@ class TimerManager:
 
 
 class Timer:
-    __slots__ = ("duration", "repeat", "start_time", "active", "_start_hooks", "_end_hooks")
+    __slots__ = ("duration", "repeat", "start_time", "active", "_start_hooks", "_end_hooks", "_hit_end")
 
     def __init__(self, duration: float, repeat: bool = None, autostart: bool = False) -> None:
         self.duration = duration
@@ -35,13 +35,15 @@ class Timer:
         self._end_hooks: list[Callable[..., Any]] = []
         # Eine Queue hier könnte scheclt sein, falls der timer auf autostart ist. Queue habe ich nur genommen für FIFO (First in, First out). Sonst Liste Nehmen
 
+        self._hit_end = False
+
         if autostart:
             self.activate()
 
         TimerManager.add(self)
 
-    def __bool__(self):  # wird gecalled wenn man if timer: macht. (timer = instance von Timer). Dann muss man nicht mehr timer.active schreiben
-        return self.active
+    def execute(self) -> bool:
+        return self._hit_end
 
     def remove(self) -> None:
         TimerManager.remove(self)
@@ -50,9 +52,11 @@ class Timer:
         self.active = True
         self.start_time = time.time()
         self._execute_hooks(self._start_hooks)
+        self._hit_end = False
 
     def end(self) -> None:
         self._execute_hooks(self._end_hooks)
+        self._hit_end = True
 
     def deactivate(self):
         self.active = False
