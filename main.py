@@ -12,13 +12,15 @@ from Scripts.utils import load_image, draw_text, random_color, make_surface, loa
 from Scripts.particles import ParticleGroup, ImageCache, CircleParticle, LeafParticle
 from Scripts.timer import TimerManager
 
-from Scripts.entities import Transform, Velocity, CollisionResolver, Animation, AnimationRenderer, AnimationUpdater, EnemyPathFinderWalker, EnemyCollisionResolver, ParticleSystemRenderer, ParticleSystemUpdater
+from Scripts.entities import Transform, Velocity, CollisionResolver, Animation, AnimationRenderer, AnimationUpdater, EnemyPathFinderWalker, EnemyCollisionResolver, ParticleSystemRenderer, ParticleSystemUpdater, Item, ItemRenderer, Gun, GunStats, ItemManager, Inventory, ItemPhysics
 import Scripts.Ecs as Ecs
 
 os.environ['SDL_VIDEO_CENTERED'] = '1'
 
 pygame.init()
 pygame.font.init()
+
+enemy_pos = (0, 0)
 
 
 class Game:
@@ -46,7 +48,8 @@ class Game:
         self.component_manager.add_component(self.p, [
             Transform(200, 30, 5, 15),
             Velocity(250, 250),
-            p_anim
+            p_anim,
+            Inventory()
         ])
         self.renderer_sys = AnimationRenderer(screen)
         self.system_manager.add_system(self.p, self.renderer_sys)
@@ -118,7 +121,14 @@ class Game:
             "particles": {
                 "particle": pallete_swap_dir(load_images("assets/particles/particle"), [(255, 255, 255)], [(255, 0, 0)]),
                 "leaf": pallete_swap_dir(load_images("assets/particles/leaf"), [(255, 255, 255)], [(0, 255, 0)]),
-            }
+            },
+            "items": {
+                "apple": load_image("assets/items/apple.png"),
+                "guns/rifle": load_image("assets/items/guns/rifle.png"),
+                "guns/pistol": load_image("assets/items/guns/pistol.png"),
+                "guns/shotgun": load_image("assets/items/guns/shotgun.png"),
+                "guns/rocketlauncher": load_image("assets/items/guns/rocketlauncher.png"),
+            },
         }
 
         self.scroll = Vector2(0)
@@ -127,6 +137,16 @@ class Game:
 
         self.particle_renderer = ParticleSystemRenderer(screen)
         self.particle_updater = ParticleSystemUpdater()
+
+        self.parsemap()
+
+    def parsemap(self):
+        for spawner in self.tile_map.extract([('spawners', 0), ('spawners', 1)], keep=False):
+            # print(spawner)
+            if spawner["variant"] == 0:
+                self.component_manager.get_component(self.p, Transform).pos = spawner["pos"]
+            elif spawner["variant"] == 1:
+                enemy_pos = spawner["pos"]
 
     def add_particle(self, type: str, rect, vel):
         p = self.entity_manager.add_entity()
@@ -147,6 +167,8 @@ class Game:
         boost = False
         drop_trough = False
         run__ = True
+        pickup = False
+        drop = False
 
         p_velocity: Velocity = self.component_manager.get_component(self.p, Velocity)
         p_transform: Transform = self.component_manager.get_component(self.p, Transform)
@@ -156,7 +178,7 @@ class Game:
         enemy_path_finder_walker = EnemyPathFinderWalker(self.p)
         enemy_coll_resolver = EnemyCollisionResolver(enemy_path_finder_walker)
         self.component_manager.add_component(enemy, [
-            Transform(350, 81, 7, 11),
+            Transform(*enemy_pos, 7, 11),
             Animation("assets/entities/enemies/walker/config.json"),
             Velocity(0, 0),
         ])
@@ -165,6 +187,25 @@ class Game:
         self.system_manager.add_system(enemy, enemy_path_finder_walker)
         self.system_manager.add_system(enemy, enemy_coll_resolver)
 
+        itemphysics = ItemPhysics()
+        itemmanager = ItemManager()
+        itemrenderer = ItemRenderer(self, screen)
+        apple = self.entity_manager.add_entity()
+        self.component_manager.add_component(apple, [Transform(200, 0, 4, 6),
+                                                     Item(self, "godapple", "apple"),
+                                                     Velocity(-20, -200)])
+        self.system_manager.add_system(apple, itemrenderer)
+        self.system_manager.add_system(apple, itemphysics)
+
+        gun = self.entity_manager.add_entity()
+        self.component_manager.add_component(gun, [Transform(100, -100, 19, 6),
+                                                   Gun(self, "gun", "guns/pistol"),
+                                                   Velocity(-20, -200)])
+        self.system_manager.add_system(gun, itemrenderer)
+        self.system_manager.add_system(gun, itemphysics)
+
+        self.system_manager.add_system(self.p, itemmanager)
+        print(f"{hash(apple)=}", f"{hash(gun)=}")
         master_time = 0
 
         while run__:
@@ -184,10 +225,13 @@ class Game:
 
             if right:
                 self.player_movement[0] = 1
+                p_velocity.x = 200
             elif left:
-                self.player_movement[0] = -1
+                p_velocity.x = -200
+                self.player_movement[0] = 1
             else:
                 self.player_movement[0] = 0
+                p_velocity.x = 0
             if self.noclip:
                 if up:
                     self.player_movement[1] = -1
@@ -204,6 +248,7 @@ class Game:
             system_args = {
                 "scroll": self.scroll,
                 "movement": self.player_movement,
+                "movement_anim": [-1 if left else (1 if right else 0), -1 if up else (1 if down else 0)],
                 "dt": dt,
                 "tilemap": self.tile_map,
                 "noclip": self.noclip,
@@ -214,7 +259,11 @@ class Game:
                 # "debug_animation": "red",
                 # "debug_tiles": "yellow",
                 # "debug_pathfinder": (255, 0, 255),
+                # "debug_items": (0, 255, 255),
                 "surface": screen,  # eig. nicht gut das so zu machen oder etwa doch ??
+                "all_items": [apple, gun],
+                "pickup": pickup,
+                "drop": drop,
             }
             systems_ret = self.system_manager.run_all_systems(**system_args)
             print("hit") if systems_ret[EnemyPathFinderWalker][enemy_path_finder_walker][enemy] else None
@@ -258,11 +307,9 @@ class Game:
                     if event.key == pygame.K_s:
                         down = True
                     if event.key == pygame.K_e:
-                        # pickup
-                        pass
+                        pickup = True
                     if event.key == pygame.K_q:
-                        # drop
-                        pass
+                        drop = True
                     if event.key == pygame.K_TAB:
                         self.noclip = not self.noclip
                         p_velocity.y = 0
@@ -289,6 +336,10 @@ class Game:
                         up = False
                     if event.key == pygame.K_s:
                         down = False
+                    if event.key == pygame.K_e:
+                        pickup = False
+                    if event.key == pygame.K_q:
+                        drop = False
                     if event.key == pygame.K_LCTRL:
                         boost = False
                     if event.key == pygame.K_LSHIFT:

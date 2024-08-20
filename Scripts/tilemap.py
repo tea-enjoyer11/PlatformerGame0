@@ -34,6 +34,7 @@ class TileMap:
         self.grass_blades = {}
 
     def extract(self, id_pairs, keep=False):
+        layer = "0"
         matches = []
         for tile in self.offgrid_tiles.copy():
             if (tile['type'], tile['variant']) in id_pairs:
@@ -41,15 +42,15 @@ class TileMap:
                 if not keep:
                     self.offgrid_tiles.remove(tile)
 
-        for loc in self.tilemap:
-            tile = self.tilemap[loc]
+        for loc in self.tilemap[layer]:
+            tile = self.tilemap[layer][loc]
             if (tile['type'], tile['variant']) in id_pairs:
                 matches.append(tile.copy())
                 matches[-1]['pos'] = matches[-1]['pos'].copy()
                 matches[-1]['pos'][0] *= self.tile_size
                 matches[-1]['pos'][1] *= self.tile_size
                 if not keep:
-                    del self.tilemap[loc]
+                    del self.tilemap[layer][loc]
 
         return matches
 
@@ -224,8 +225,6 @@ class TileMap:
             # surf.blit(tsurf, (0, 0))
         for _, grass_patch in self.grass_blades.items():
             for tile in grass_patch["blades"]:
-                # img, rect = make_rot(self.game, tile["variant"], tile["angle"], tuple(tile["pos"]))
-                # t_pos = (int(_.split(";")[0]), int(_.split(";")[1]))
                 img, rect = make_rot(self.game, tile["variant"], tile["angle"], tuple(tile["pos"]))
                 surf.blit(img, (rect.x - offset[0], rect.y - offset[1]))
 
@@ -233,12 +232,18 @@ class TileMap:
 MAX_GRASS_STEPS = 25
 
 
-@functools.lru_cache(maxsize=None)
 def make_rot(game, variant, angle, b_pos) -> tuple[pygame.Surface, pygame.FRect]:
     org_image: pygame.Surface = game.assets["grass_blades"][variant]
     org_rect = org_image.get_frect()
     org_rect.topleft = b_pos
-    rot_image = pygame.transform.rotate(org_image, angle)
+    rot_image = make_rot_image(game, variant, angle)
     rot_rect = rot_image.get_frect(center=org_rect.center)
 
     return (rot_image, rot_rect)
+
+
+@functools.lru_cache(maxsize=8192)
+def make_rot_image(game, variant, angle) -> pygame.Surface:
+    org_image: pygame.Surface = game.assets["grass_blades"][variant]
+    rot_image = pygame.transform.rotate(org_image, angle)
+    return rot_image

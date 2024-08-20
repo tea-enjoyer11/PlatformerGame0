@@ -63,5 +63,7 @@ def clamp_number_to_range_steps(n, start, end, step) -> float:
     return round(n / step) * step
 
 
-def sign(n):
-    return n / abs(n)
+def sign(n, zero_error_return=1):
+    if n != 0:
+        return n / abs(n)
+    return zero_error_return
