@@ -48,10 +48,11 @@ ComponentInstanceType = typing.TypeVar("ComponentInstanceType", bound=BaseCompon
 
 
 class ComponentManager:
-    __slots__ = ("_components", )
+    __slots__ = ("_components", "_subclassed_components")
 
     def __init__(self) -> None:
         self._components: dict[typing.Type[BaseComponent], dict[Entity, ComponentInstanceType]] = dict()  # type: ignore
+        self._subclassed_components: dict[BaseComponent, dict[Entity, BaseComponent]] = {}
 
         self.__init_components()
 
@@ -59,17 +60,35 @@ class ComponentManager:
 
     def __init_components(self) -> None:
         for subclass in BaseComponent.__subclasses__():
+            # print(subclass, subclass.__subclasses__())
             self._components[subclass] = dict()
+            for subsubclass in subclass.__subclasses__():
+                self._subclassed_components[subsubclass] = dict()
+        # print(self._components, "------------", self._subclassed_components)
 
     def add_component(self, entity: Entity, components: typing.List[BaseComponent]) -> None:
         for component in components:
-            self._components[type(component)][entity] = component
+            # print(component.__class__)
+            t = type(component)
+            # print(2, hash(entity), t)
+            if t in self._components:
+                self._components[t][entity] = component
+            else:
+                self._subclassed_components[t][entity] = component
+            # print(self._subclassed_components)
 
     def remove_component(self, entity: Entity, component_type) -> None:
+        raise_ = False
         try:
             del self._components[component_type][entity]
         except KeyError:
-            raise KeyError(f"Entity: {entity} does not have component type: {component_type}")
+            raise_ = True
+        try:
+            del self._subclassed_components[component_type][entity]
+        except KeyError:
+            raise_ = True
+        # if raise_:
+        #     raise KeyError(f"Entity: {entity} does not have component type: {component_type}")
 
     def remove_entity(self, entity: Entity) -> None:
         for component_type in self._components:
@@ -77,18 +96,52 @@ class ComponentManager:
                 del self._components[component_type][entity]
             except KeyError:
                 pass
+            try:
+                del self._subclassed_components[component_type][entity]
+            except KeyError:
+                pass
 
     def get_all_components(self, entity: Entity, component_types: typing.List[typing.Type[BaseComponent]]) -> dict[typing.Type[BaseComponent], BaseComponent]:
         ret = dict()
+
+        # TODO
+        # component_types kommt von Systemmanager.run_all_systems. und zwar von ...required_component types.
+        # Check einbauen, dass falls Entity eine subclass von component hat es auch als "parent" class zurück gegeben wird.
+        # Heißt wenn Item gefragt, entity hat aber Gun (subclass von item) dann wird {Item: Gun()} returnt.
+
+        # print()
+        # print(component_types)
         for t in component_types:
-            ret[t] = self._components[t][entity]
+            # print(t)
+            subclass = None
+            try:
+                self._components[t][entity]
+            except KeyError:
+                # print("abc", self._components[t], entity)
+                for sc in t.__subclasses__():
+                    if sc in self._subclassed_components:
+                        subclass = sc
+
+            # print(f"{subclass=}", f"{t=}")
+            if subclass in self._subclassed_components:
+                # print(True)
+                ret[t] = self._subclassed_components[subclass][entity]
+            else:
+                # print(False)
+                # print(self._components[t])
+                ret[t] = self._components[t][entity]
+        # print(f"{ret=}")
         return ret
 
     def get_component(self, entity: Entity, component_type: typing.Type[BaseComponent]) -> BaseComponent:
         try:
             return self._components[component_type][entity]
         except KeyError:
-            raise KeyError(f"Entity: {entity} does not have component type: {component_type}")
+            for sc in component_type.__subclasses__():
+                try:
+                    return self._subclassed_components[sc][entity]
+                except KeyError:
+                    raise KeyError(f"Entity: {entity} does not have component type: {component_type}")
 
 
 class SystemManager:
@@ -139,7 +192,9 @@ class SystemManager:
             if base_system in self._systems_ran_already:
                 continue
             for entity in entities:
-                self.ret[type(base_system)][base_system][entity] = base_system.update_entity(self.entity_manager._entities[entity], self.component_manager.get_all_components(entity, base_system.required_component_types), **kwargs)  # type: ignore
+                components = self.component_manager.get_all_components(entity, base_system.required_component_types)
+                # print(f"{components=}")
+                self.ret[type(base_system)][base_system][entity] = base_system.update_entity(self.entity_manager._entities[entity], components, **kwargs)  # type: ignore
 
         # t1 = time.time()
 
