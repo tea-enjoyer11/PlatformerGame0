@@ -12,7 +12,7 @@ import json
 import time
 import collections
 from Scripts.Ui import easings
-from Scripts.utils_math import sign, dist, clamp
+from Scripts.utils_math import sign, dist, clamp, normalize, skalar
 import random
 import dataclasses
 
@@ -60,6 +60,7 @@ class Transform(Ecs.BaseComponent):
 
         self.falling_through = False
         self.fall_through_timer = Timer(0.18, False, False)
+        self._org_rect = [x, y, w, h]
 
     @property
     def xy(self) -> Tuple[int | float, int | float]:
@@ -217,9 +218,11 @@ class AnimationUpdater(Ecs.BaseSystem):
 
 
 class Image(Ecs.BaseComponent):
-    def __init__(self, image: Surface) -> None:
+    def __init__(self, image: Surface, angle=None) -> None:
         super().__init__()
         self.img = image
+        if angle:
+            self.img = pygame.transform.rotate(image, angle)
 
 
 class AnimationRenderer(Ecs.BaseSystem):
@@ -423,10 +426,6 @@ class EnemyCollisionResolver(Ecs.BaseSystem):
         return return_data
 
 
-def skalar(p1, p2):
-    return (p1[0] * p2[0] + p1[1] * p2[1])
-
-
 class Ray:
     def __init__(self, origin, direction) -> None:
         self.origin = origin
@@ -554,6 +553,10 @@ class ItemPhysics(Ecs.BaseSystem):
     def update_entity(self, entity: Entity, entity_components: dict[type[BaseComponent], BaseComponent], **kwargs) -> None:
         velocity: Velocity = entity_components[Velocity]
         transform: Transform = entity_components[Transform]
+        item_component: Item = entity_components[Item]
+
+        if item_component.ignore_physics:
+            return
 
         tilemap = kwargs["tilemap"]
         dt = kwargs["dt"]
@@ -602,12 +605,17 @@ class ItemPhysics(Ecs.BaseSystem):
             velocity.x = 0
         # print(velocity.xy)
 
+        if "debug_tiles" in kwargs:
+            scroll = kwargs["scroll"]
+            for r in tilemap.physics_rects_around(transform.pos):
+                pygame.draw.rect(screen, kwargs["debug_tiles"], Rect(r.x - scroll[0], r.y - scroll[1], r.w, r.h), 1)
+
 
 class Item(Ecs.BaseComponent):
     pickup_inflation = (10, 10)
     throw_force = 1.3
 
-    def __init__(self, game, name, type) -> None:
+    def __init__(self, game, name: str, type: str) -> None:
         super().__init__()
 
         self.game = game
@@ -616,11 +624,15 @@ class Item(Ecs.BaseComponent):
         self.angle = 0
         self.owner: Ecs.Entity = None
 
+        self.ignore_physics = False
+
     def pickup(self, owner):
         self.owner = owner
+        self.ignore_physics = True
 
     def drop(self, owner):
         self.owner = None
+        self.ignore_physics = False
 
     def use(self, **kwargs):
         raise NotImplementedError
@@ -633,36 +645,60 @@ class Item(Ecs.BaseComponent):
 class GunStats:
     firerate: float  # wie viele ms zwischen den Schüssen
     damage: float
+    ammo: int
+    reloadtime: float
+    bullets: float = dataclasses.field(default=1)
+    bullet_speed: float = dataclasses.field(default=20)
+
+
+GUN_STATS = {
+    "guns/rifle": GunStats(0.1, 15, 21, reloadtime=1.7),
+    "guns/pistol": GunStats(0.4, 33, 6, reloadtime=1.4),
+    "guns/shotgun": GunStats(0.4, 9, 2, reloadtime=2, bullets=11),
+    "guns/rocketlauncher": GunStats(0.001, 100, 1, reloadtime=3, bullet_speed=10),
+}
 
 
 class Gun(Item):
-    def __init__(self, game, name, type) -> None:
+    def __init__(self, game, name: str, type: str) -> None:
         super().__init__(game, name, type)
 
-        self.stats = GunStats(0.1, 10)
-
-        self.shoottimer = Timer(self.stats.firerate)  # TODO timer klasse fixen !!
-        self.game = game
-        self.name = name
-        self.type = type
-        self.angle = 0
-        self.owner: Ecs.Entity = None
+        self.stats = GUN_STATS[type]
+        self.shoottimer = Timer(self.stats.firerate, start_on_end=True)
+        self.reloadtimer = Timer(self.stats.reloadtime, start_on_end=True)
+        self.ammo = self.stats.ammo
 
     def pickup(self, owner):
-        self.owner = owner
+        super().pickup(owner)
 
     def drop(self, owner):
-        self.owner = None
+        super().drop(owner)
 
     def use(self, **kwargs):
-        if self.shoottimer:
-            pass
+        if self.shoottimer.ended and self.ammo > 0 and self.reloadtimer.ended:
+            mPos = pygame.mouse.get_pos()
+            mPos = (mPos[0] / DOWNSACLE_FACTOR, mPos[1] / DOWNSACLE_FACTOR)
+            angle = math.radians(self.angle + 90)
+            print(self.angle, self.angle + 90)
+            vel = (math.cos(angle) * 10,
+                   math.sin(angle) * 10)
+            owner_transform = kwargs["owner_transform"]
+            ret = {"angle": self.angle, "rect": Rect(owner_transform.x, owner_transform.y, 5, 3), "vel": vel, "dmg": self.stats.damage}
+            self.shoottimer.start()
+            self.ammo -= 1
+            return ret
         else:
             pass
+        return None
 
     def update(self, **kwargs):
         if not self.owner:
             return
+        reload_input = kwargs["reload_input"]
+        if reload_input or (pygame.mouse.get_pressed()[0] and self.ammo == 0):
+            self.reloadtimer.start()
+        if self.reloadtimer.just_ended:
+            self.ammo = self.stats.ammo
 
         scroll = kwargs["scroll"]
         mPos = pygame.mouse.get_pos()
@@ -701,13 +737,16 @@ class ItemManager(Ecs.BaseSystem):  # bekommt entities, die items aufsammeln kö
         all_items = kwargs["all_items"]
         pickup = kwargs["pickup"]
         drop = kwargs["drop"]
+        scroll = kwargs["scroll"]
+
+        ret = {}
 
         for item in all_items:
             item_component: Item = self.component_manager.get_component(item, Item)
             item_transform: Transform = self.component_manager.get_component(item, Transform)
             item_velocity: Velocity = self.component_manager.get_component(item, Velocity)
 
-            item_update_args = {"transform": item_transform, "scroll": kwargs["scroll"]}
+            item_update_args = {"transform": item_transform, "scroll": kwargs["scroll"], "reload_input": pygame.key.get_just_pressed()[pygame.K_r]}
             item_component.update(**item_update_args)
 
             if item_component.owner:
@@ -727,13 +766,27 @@ class ItemManager(Ecs.BaseSystem):  # bekommt entities, die items aufsammeln kö
                 t = self.component_manager.get_component(item_component.owner, Transform)
                 item_transform.pos = t.pos
 
+                if item_component.type.startswith("guns/"):
+                    if pygame.mouse.get_pressed()[0] and item_component.shoottimer.ended:
+                        use_args = {"owner_transform": transform}
+
+                        ret_item = item_component.use(**use_args)
+                        if ret_item:
+                            ret[(item, item_component.owner)] = ret_item
+
             if "debug_items" in kwargs:
+                try:
+                    print(item_component.ammo, item_component.reloadtimer.remaining(), item_component.stats)
+                except AttributeError:
+                    pass
                 color = kwargs["debug_items"]
                 scroll = kwargs["scroll"]
                 r = item_transform.rect.inflate(*Item.pickup_inflation)
                 pygame.draw.rect(kwargs["surface"], color, Rect(r.x - scroll[0], r.y - scroll[1], r.w, r.h), 1)
                 r = item_transform.rect
                 pygame.draw.rect(kwargs["surface"], color, Rect(r.x - scroll[0], r.y - scroll[1], r.w, r.h), 1)
+
+        return ret
 
 
 class ItemRenderer(Ecs.BaseSystem):
@@ -761,8 +814,44 @@ class ItemRenderer(Ecs.BaseSystem):
             self.image_cache[key] = (rot_image, org_rect)
 
         img, org_rect = self.image_cache[key]
-        rect = img.get_rect(center=transform.rect.center)
+        if item.owner:
+            rect = img.get_rect(center=self.component_manager.get_component(item.owner, Transform).rect.center)
+            transform.rect = FRect(transform.x - rect.w/4, transform.y - rect.h/4, rect.w, rect.h)
+        else:
+            rect = img.get_rect(center=transform.rect.center)
+            transform.rect = FRect(transform.x, transform.y, rect.w, rect.h)
         self.screen.blit(img, (rect.x - scroll[0], rect.y - scroll[1]))
+
+
+class ProjectileData(Ecs.BaseComponent):
+    def __init__(self, dmg, owner: Ecs.Entity) -> None:
+        super().__init__()
+
+        self.dmg = dmg
+        self.owner = owner
+
+
+class ProjectileManager(Ecs.BaseSystem):
+    def __init__(self) -> None:
+        super().__init__([Transform, ProjectileData, Velocity])
+
+    def update_entity(self, entity: Entity, entity_components: dict[type[BaseComponent], BaseComponent], **kwargs) -> None:
+        transform: Transform = entity_components[Transform]
+        velocity: Velocity = entity_components[Velocity]
+        projectiledata: ProjectileData = entity_components[ProjectileData]
+
+        dt = kwargs["dt"]
+
+        transform.x += velocity.x * dt
+        transform.y += velocity.y * dt
+
+        if "debug_projectiles" in kwargs:
+            color = kwargs["debug_projectiles"]
+            scroll = kwargs["scroll"]
+            pygame.draw.rect(kwargs["surface"], color, Rect(transform.x - scroll[0], transform.y - scroll[1], transform.w, transform.h), 1)
+            center = transform.rect.center
+            v = normalize(*velocity.xy)
+            pygame.draw.line(kwargs["surface"], color, (center[0] - scroll[0], center[1] - scroll[1],), ((center[0] + v[0] * 15) - scroll[0], (center[1] + v[1] * 15) - scroll[1]), 1)
 
 
 class ParticleSystemUpdater(Ecs.ExtendedSystem):

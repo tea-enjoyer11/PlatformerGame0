@@ -2,6 +2,16 @@ from pygame import Vector2
 import math
 
 
+def skalar(v1, v2):
+    # v1.n * v2.n + ... + v1.m + v2.m
+    return sum(v1[i] * v2[i] for i in range(len(v1)))
+
+
+def normalize(x, y):
+    n = x + y
+    return (x / n, y / n)
+
+
 def lerp(start: float, end: float, time: float) -> float:
     return start + (end - start) * time
 

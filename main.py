@@ -12,7 +12,7 @@ from Scripts.utils import load_image, draw_text, random_color, make_surface, loa
 from Scripts.particles import ParticleGroup, ImageCache, CircleParticle, LeafParticle
 from Scripts.timer import TimerManager
 
-from Scripts.entities import Transform, Velocity, CollisionResolver, Animation, AnimationRenderer, AnimationUpdater, EnemyPathFinderWalker, EnemyCollisionResolver, ParticleSystemRenderer, ParticleSystemUpdater, Item, ItemRenderer, Gun, GunStats, ItemManager, Inventory, ItemPhysics
+from Scripts.entities import Transform, Velocity, CollisionResolver, Animation, AnimationRenderer, Image, ImageRenderer, AnimationUpdater, EnemyPathFinderWalker, EnemyCollisionResolver, ParticleSystemRenderer, ParticleSystemUpdater, Item, ItemRenderer, Gun, ItemManager, Inventory, ItemPhysics, ProjectileData, ProjectileManager
 import Scripts.Ecs as Ecs
 
 os.environ['SDL_VIDEO_CENTERED'] = '1'
@@ -96,6 +96,7 @@ class Game:
         self.fps_idx = 0
 
         self.enemies = []
+        self.items = []
 
         self.assets = {
             'decor': load_images('assets/tiles/decor'),
@@ -128,6 +129,7 @@ class Game:
                 "guns/pistol": load_image("assets/items/guns/pistol.png"),
                 "guns/shotgun": load_image("assets/items/guns/shotgun.png"),
                 "guns/rocketlauncher": load_image("assets/items/guns/rocketlauncher.png"),
+                "guns/projectile": load_image("assets/items/guns/projectile.png"),
             },
         }
 
@@ -137,16 +139,43 @@ class Game:
 
         self.particle_renderer = ParticleSystemRenderer(screen)
         self.particle_updater = ParticleSystemUpdater()
+        self.enemy_path_finder_walker = EnemyPathFinderWalker(self.p)
+        self.enemy_coll_resolver = EnemyCollisionResolver(self.enemy_path_finder_walker)
+        self.item_physics = ItemPhysics()
+        self.item_manager = ItemManager()
+        self.item_renderer = ItemRenderer(self, screen)
+
+        self.system_manager.add_system(self.p, self.item_manager)
 
         self.parsemap()
 
     def parsemap(self):
-        for spawner in self.tile_map.extract([('spawners', 0), ('spawners', 1)], keep=False):
-            # print(spawner)
+        for spawner in self.tile_map.extract([('spawners', 0), ('spawners', 1), ("spawners", 2), ("spawners", 3), ("spawners", 4), ("spawners", 5), ("spawners", 6)], keep=False):
+            print(spawner)
             if spawner["variant"] == 0:
                 self.component_manager.get_component(self.p, Transform).pos = spawner["pos"]
-            elif spawner["variant"] == 1:
-                enemy_pos = spawner["pos"]
+            if spawner["variant"] == 1:
+                enemy = self.entity_manager.add_entity()
+                self.component_manager.add_component(enemy, [
+                    Transform(*spawner["pos"], 7, 11),
+                    Animation("assets/entities/enemies/walker/config.json"),
+                    Velocity(15, 0),
+                ])
+                self.system_manager.add_system(enemy, self.animation_updater_sys)
+                self.system_manager.add_system(enemy, self.renderer_sys)
+                self.system_manager.add_system(enemy, self.enemy_path_finder_walker)
+                self.system_manager.add_system(enemy, self.enemy_coll_resolver)
+                self.enemies.append(enemy)
+            if spawner["variant"] in [2, 3, 4, 5, 6]:
+                lt = {2: "guns/rifle", 3: "guns/pistol", 4: "guns/shotgun", 5: "guns/rocketlauncher", 6: "apple"}
+                i = self.entity_manager.add_entity()
+                item_comp = Item(self, "godappel", "apple") if spawner["variant"] == 6 else Gun(self, "weapon", lt[spawner["variant"]])
+                self.component_manager.add_component(i, [Transform(*spawner["pos"], 4, 6),
+                                                         item_comp,
+                                                         Velocity(-20, -200)])
+                self.system_manager.add_system(i, self.item_renderer)
+                self.system_manager.add_system(i, self.item_physics)
+                self.items.append(i)
 
     def add_particle(self, type: str, rect, vel):
         p = self.entity_manager.add_entity()
@@ -174,39 +203,12 @@ class Game:
         p_transform: Transform = self.component_manager.get_component(self.p, Transform)
         p_anim: Animation = self.component_manager.get_component(self.p, Animation)
 
-        enemy = self.entity_manager.add_entity()
-        enemy_path_finder_walker = EnemyPathFinderWalker(self.p)
-        enemy_coll_resolver = EnemyCollisionResolver(enemy_path_finder_walker)
-        self.component_manager.add_component(enemy, [
-            Transform(*enemy_pos, 7, 11),
-            Animation("assets/entities/enemies/walker/config.json"),
-            Velocity(0, 0),
-        ])
-        self.system_manager.add_system(enemy, self.animation_updater_sys)
-        self.system_manager.add_system(enemy, self.renderer_sys)
-        self.system_manager.add_system(enemy, enemy_path_finder_walker)
-        self.system_manager.add_system(enemy, enemy_coll_resolver)
+        projectile_manager = ProjectileManager()
+        image_renderer = ImageRenderer(screen)
 
-        itemphysics = ItemPhysics()
-        itemmanager = ItemManager()
-        itemrenderer = ItemRenderer(self, screen)
-        apple = self.entity_manager.add_entity()
-        self.component_manager.add_component(apple, [Transform(200, 0, 4, 6),
-                                                     Item(self, "godapple", "apple"),
-                                                     Velocity(-20, -200)])
-        self.system_manager.add_system(apple, itemrenderer)
-        self.system_manager.add_system(apple, itemphysics)
-
-        gun = self.entity_manager.add_entity()
-        self.component_manager.add_component(gun, [Transform(100, -100, 19, 6),
-                                                   Gun(self, "gun", "guns/pistol"),
-                                                   Velocity(-20, -200)])
-        self.system_manager.add_system(gun, itemrenderer)
-        self.system_manager.add_system(gun, itemphysics)
-
-        self.system_manager.add_system(self.p, itemmanager)
-        print(f"{hash(apple)=}", f"{hash(gun)=}")
         master_time = 0
+
+        projectiles = []
 
         while run__:
             jump = False
@@ -256,22 +258,35 @@ class Game:
                 "max_gravity": self.max_gravity,
                 "player_entity": self.p,
                 "drop_through": drop_trough,
-                # "debug_animation": "red",
-                # "debug_tiles": "yellow",
-                # "debug_pathfinder": (255, 0, 255),
+                # "debug_animation": (255,0,0),
+                # "debug_tiles": (255, 255, 0),
+                "debug_pathfinder": (255, 0, 255),
                 # "debug_items": (0, 255, 255),
+                # "debug_projectiles": (255, 0, 255),
                 "surface": screen,  # eig. nicht gut das so zu machen oder etwa doch ??
-                "all_items": [apple, gun],
+                "all_items": self.items,
                 "pickup": pickup,
                 "drop": drop,
             }
             systems_ret = self.system_manager.run_all_systems(**system_args)
-            print("hit") if systems_ret[EnemyPathFinderWalker][enemy_path_finder_walker][enemy] else None
             if systems_ret[CollisionResolver][self.collision_resolver_sys][self.p]["collisions"]["down"]:
                 reached_max_jump = False
             if systems_ret[ParticleSystemUpdater]:
                 for e in systems_ret[ParticleSystemUpdater][self.particle_updater]:
                     self.entity_manager.remove_entity(e)
+
+            for _, manager in systems_ret[ItemManager].items():
+                for attached_entity, data in manager.items():
+                    for ens, stats in data.items():
+                        proj = self.entity_manager.add_entity()
+                        r = stats["rect"]
+                        self.component_manager.add_component(proj, [Transform(r.x, r.y, r.w, r.h),
+                                                                    Velocity(*stats["vel"]),
+                                                                    ProjectileData(stats["dmg"], ens[1]),
+                                                                    Image(self.assets["items"]["guns/projectile"], angle=stats["angle"])])
+                        self.system_manager.add_system(proj, projectile_manager)
+                        self.system_manager.add_system(proj, image_renderer)
+                        projectiles.append(proj)
 
             # if (tiles := systems_ret[CollisionResolver][self.collision_resolver_sys][self.p]["coll_tiles"]):
             #     c1 = (0, 0, 255)
@@ -317,7 +332,7 @@ class Game:
                         self.dt_multiplicator = min(5, self.dt_multiplicator + 0.25)
                     if event.key == pygame.K_DOWN:
                         self.dt_multiplicator = max(0, self.dt_multiplicator - 0.25)
-                    if event.key == pygame.K_r:
+                    if event.key == pygame.K_z:
                         p_transform.pos = Vector2(200, 50)
                         p_velocity.y = 0
                         self.particle_group.clear()
