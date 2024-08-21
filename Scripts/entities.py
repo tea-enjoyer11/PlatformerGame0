@@ -12,7 +12,7 @@ import json
 import time
 import collections
 from Scripts.Ui import easings
-from Scripts.utils_math import sign, dist, clamp, normalize, skalar
+from Scripts.utils_math import sign, dist, clamp, normalize, skalar, magnitude, clamp_number_to_range_steps
 import random
 import dataclasses
 
@@ -92,12 +92,15 @@ class Transform(Ecs.BaseComponent):
 
     @property
     def pos(self) -> Vector2:
-        return Vector2(self.x, self.y)
+        return (self.x, self.y)
 
     @pos.setter
     def pos(self, pos: Vector2 | Tuple) -> None:
         self.x = pos[0]
         self.y = pos[1]
+
+    def tile_pos(self):
+        return (self.x // 16, self.y // 16)  # TODO besseren weg finden hier die tilesize einzubauen. → nicht hardcoden
 
     @property
     def size(self) -> Tuple[int | float, int | float]:
@@ -309,6 +312,7 @@ class CollisionResolver(Ecs.BaseSystem):
                         entity_rect.left = rect.right
                         collisions['left'] = True
                 transform.x = entity_rect.x
+                break  # TODO sich vergewissern, dass das nicht das Ding zerstört.
 
         transform.y += frame_movement[1]
         entity_rect = transform.frect
@@ -318,7 +322,7 @@ class CollisionResolver(Ecs.BaseSystem):
                 if tile["type"] in FALLTRHOGH_TILES:  # wenn spieler nicht mehr mit fallthrough collided, dann kann man aus machen.
                     collided_with_fall_trough = True
                 if frame_movement[1] > 0:  # downards
-                    if tile["type"] in FALLTRHOGH_TILES and transform.falling_through or (tile["type"] in FALLTRHOGH_TILES and (rect.y - rect.h / 2) - transform.pos.y < 1):  # durch droppen mit key input
+                    if tile["type"] in FALLTRHOGH_TILES and transform.falling_through or (tile["type"] in FALLTRHOGH_TILES and (rect.y - rect.h / 2) - transform.pos[1] < 1):  # durch droppen mit key input
                         pass
                     else:
                         entity_rect.bottom = rect.top
@@ -330,6 +334,7 @@ class CollisionResolver(Ecs.BaseSystem):
                         entity_rect.top = rect.bottom
                         collisions['up'] = True
                 transform.y = entity_rect.y
+                break  # TODO sich vergewissern, dass das nicht das Ding zerstört.
 
         # resetting fallthrough
         if not collided_with_fall_trough:
@@ -397,7 +402,7 @@ class EnemyCollisionResolver(Ecs.BaseSystem):
             if entity_rect.colliderect(rect):
                 return_data["coll_tiles"].append(tile)
                 if frame_movement[1] > 0:  # downards
-                    if tile["type"] in FALLTRHOGH_TILES and transform.falling_through or (tile["type"] in FALLTRHOGH_TILES and (rect.y - rect.h / 2) - transform.pos.y < 1):  # durch droppen mit key input
+                    if tile["type"] in FALLTRHOGH_TILES and transform.falling_through or (tile["type"] in FALLTRHOGH_TILES and (rect.y - rect.h / 2) - transform.pos[1] < 1):  # durch droppen mit key input
                         pass
                     else:
                         entity_rect.bottom = rect.top
@@ -546,69 +551,89 @@ class EnemyPathFinderWalker(Ecs.BaseSystem):
         return player_hit
 
 
-class ItemPhysics(Ecs.BaseSystem):
+class ItemPhysics(Ecs.ExtendedSystem):
     def __init__(self) -> None:
         super().__init__([Transform, Item, Velocity])
 
-    def update_entity(self, entity: Entity, entity_components: dict[type[BaseComponent], BaseComponent], **kwargs) -> None:
-        velocity: Velocity = entity_components[Velocity]
-        transform: Transform = entity_components[Transform]
-        item_component: Item = entity_components[Item]
-
-        if item_component.ignore_physics:
-            return
+    def update_entities(self, entites_data: dict[Entity, dict[type[BaseComponent], BaseComponent]], **kwargs) -> None:
+        debug_tiles: set[FRect] = set()
 
         tilemap = kwargs["tilemap"]
         dt = kwargs["dt"]
-        frame_movement = (velocity.x * dt, velocity.y * dt)
-
-        collisions = {'up': False, 'down': False, 'right': False, 'left': False}
-
-        transform.x += frame_movement[0]
-        entity_rect = transform.frect
-        for rect, tile in zip(tilemap.physics_rects_around(transform.pos), tilemap.get_around(transform.pos, ignore={"decor"})):
-            if entity_rect.colliderect(rect):
-                if frame_movement[0] > 0:  # right
-                    entity_rect.right = rect.left
-                    collisions['right'] = True
-                if frame_movement[0] < 0:  # left
-                    entity_rect.left = rect.right
-                    collisions['left'] = True
-                transform.x = entity_rect.x
-        transform.y += frame_movement[1]
-        entity_rect = transform.frect
-        for rect, tile in zip(tilemap.physics_rects_around(transform.pos), tilemap.get_around(transform.pos, ignore={"decor"})):
-            if entity_rect.colliderect(rect):
-                if frame_movement[1] > 0:  # downards
-                    entity_rect.bottom = rect.top
-                    collisions['down'] = True
-                if frame_movement[1] < 0:  # upwards
-                    entity_rect.top = rect.bottom
-                    collisions['up'] = True
-                transform.y = entity_rect.y
-
         gravity = kwargs["gravity"]
         max_gravity = kwargs["max_gravity"]
-        velocity[1] = min(max_gravity/1, velocity[1] + gravity)
+        scroll = kwargs["scroll"]
+        friction = 0.3
 
-        friction = 0.5
-        if collisions["down"] or collisions["up"]:
-            velocity.y *= -friction
-            velocity.x *= 0.8
-        if 0 <= velocity.y <= 3 or -3 <= velocity.y <= 0:
-            # print("y")
-            velocity.y = 0
-        if collisions["right"] or collisions["left"]:
-            velocity.x *= -friction
-        if 0 <= velocity.x <= 3 or -3 <= velocity.x <= 0:
-            # print("x")
-            velocity.x = 0
-        # print(velocity.xy)
+        entity_map = collections.defaultdict(list)  # https://docs.python.org/3/library/collections.html#collections.defaultdict
+        for entity, entity_components in entites_data.items():
+            transform: Transform = entity_components[Transform]
+            tp = transform.tile_pos()
+            entity_map[(tp[0] * 16, tp[1] * 16)].append((entity, entity_components))
+
+        for tile_pos, entity_group in entity_map.items():
+            nearby_rects = tilemap.physics_rects_around(tile_pos)
+            nearby_tiles = tilemap.get_around(tile_pos, ignore={"decor"})
+
+            for entity, entity_components in entity_group:
+                velocity: Velocity = entity_components[Velocity]
+                transform: Transform = entity_components[Transform]
+                item_component: Item = entity_components[Item]
+
+                if item_component.ignore_physics:
+                    continue  # return
+
+                frame_movement = (velocity.x * dt, velocity.y * dt)
+
+                collisions = {'up': False, 'down': False, 'right': False, 'left': False}
+
+                transform.x += frame_movement[0]
+                if frame_movement[0]:
+                    entity_rect = transform.frect
+                    for rect, tile in zip(nearby_rects, nearby_tiles):
+                        if entity_rect.colliderect(rect):
+                            if frame_movement[0] > 0:  # right
+                                entity_rect.right = rect.left
+                                collisions['right'] = True
+                            if frame_movement[0] < 0:  # left
+                                entity_rect.left = rect.right
+                                collisions['left'] = True
+                            transform.x = entity_rect.x
+                            break  # TODO sich vergewissern, dass das nicht das Ding zerstört.
+                transform.y += frame_movement[1]
+                if frame_movement[1]:
+                    entity_rect = transform.frect
+                    for rect, tile in zip(nearby_rects, nearby_tiles):
+                        if entity_rect.colliderect(rect):
+                            if frame_movement[1] > 0:  # downards
+                                entity_rect.bottom = rect.top
+                                collisions['down'] = True
+                            if frame_movement[1] < 0:  # upwards
+                                entity_rect.top = rect.bottom
+                                collisions['up'] = True
+                            transform.y = entity_rect.y
+                            break  # TODO sich vergewissern, dass das nicht das Ding zerstört.
+
+                velocity[1] = min(max_gravity/1, velocity[1] + gravity)
+
+                if collisions['down'] or collisions['up']:
+                    velocity.y *= -friction
+                    velocity.x *= friction
+                if abs(velocity.y) <= 3:
+                    velocity.y = 0
+
+                if collisions['right'] or collisions['left']:
+                    velocity.x *= -friction
+                if abs(velocity.x) <= 3:
+                    velocity.x = 0
+
+            if "debug_tiles" in kwargs:
+                debug_tiles |= {tuple(r) for r in tilemap.physics_rects_around(transform.pos)}
 
         if "debug_tiles" in kwargs:
-            scroll = kwargs["scroll"]
-            for r in tilemap.physics_rects_around(transform.pos):
-                pygame.draw.rect(screen, kwargs["debug_tiles"], Rect(r.x - scroll[0], r.y - scroll[1], r.w, r.h), 1)
+            color = kwargs["debug_tiles"]
+            for r in debug_tiles:
+                pygame.draw.rect(screen, color, Rect(r[0] - scroll[0], r[1] - scroll[1], r[2], r[3]), 1)
 
 
 class Item(Ecs.BaseComponent):
@@ -641,22 +666,30 @@ class Item(Ecs.BaseComponent):
         return
 
 
-@dataclasses.dataclass
+@ dataclasses.dataclass
 class GunStats:
     firerate: float  # wie viele ms zwischen den Schüssen
     damage: float
     ammo: int
     reloadtime: float
+    gun_length: float  # in px
     bullets: float = dataclasses.field(default=1)
-    bullet_speed: float = dataclasses.field(default=20)
+    bullet_speed: float = dataclasses.field(default=400)
 
 
 GUN_STATS = {
-    "guns/rifle": GunStats(0.1, 15, 21, reloadtime=1.7),
-    "guns/pistol": GunStats(0.4, 33, 6, reloadtime=1.4),
-    "guns/shotgun": GunStats(0.4, 9, 2, reloadtime=2, bullets=11),
-    "guns/rocketlauncher": GunStats(0.001, 100, 1, reloadtime=3, bullet_speed=10),
+    "guns/rifle": GunStats(0.1, 15, 21000, reloadtime=1.7, gun_length=19),
+    "guns/pistol": GunStats(0.4, 33, 6, reloadtime=1.4, gun_length=10),
+    "guns/shotgun": GunStats(0.4, 9, 2, reloadtime=2, bullets=11, gun_length=19),
+    "guns/rocketlauncher": GunStats(0.001, 100, 1, reloadtime=3, bullet_speed=100, gun_length=23),
 }
+
+
+class RemoveAfterTime(Ecs.BaseComponent):
+    def __init__(self, duration: float) -> None:
+        # duration in s angegeben
+        super().__init__()
+        self.timer = Timer(duration, autostart=True)
 
 
 class Gun(Item):
@@ -667,6 +700,7 @@ class Gun(Item):
         self.shoottimer = Timer(self.stats.firerate, start_on_end=True)
         self.reloadtimer = Timer(self.stats.reloadtime, start_on_end=True)
         self.ammo = self.stats.ammo
+        self.barreltip_dir = (0, 0)
 
     def pickup(self, owner):
         super().pickup(owner)
@@ -676,14 +710,21 @@ class Gun(Item):
 
     def use(self, **kwargs):
         if self.shoottimer.ended and self.ammo > 0 and self.reloadtimer.ended:
+            transform = kwargs["transform"]
+            scroll = kwargs["scroll"]
             mPos = pygame.mouse.get_pos()
             mPos = (mPos[0] / DOWNSACLE_FACTOR, mPos[1] / DOWNSACLE_FACTOR)
-            angle = math.radians(self.angle + 90)
-            print(self.angle, self.angle + 90)
-            vel = (math.cos(angle) * 10,
-                   math.sin(angle) * 10)
+
+            gun_world_pos = (transform.x - scroll[0], transform.y - scroll[1])
+            direction = (mPos[0] - gun_world_pos[0], mPos[1] - gun_world_pos[1])
+            magn = magnitude(direction)
+            if magn != 0:
+                direction = (direction[0] / magn, direction[1] / magn)
+            vel = (direction[0] * self.stats.bullet_speed, direction[1] * self.stats.bullet_speed)
+
             owner_transform = kwargs["owner_transform"]
-            ret = {"angle": self.angle, "rect": Rect(owner_transform.x, owner_transform.y, 5, 3), "vel": vel, "dmg": self.stats.damage}
+            center = owner_transform.rect.center
+            ret = {"angle": self.angle, "rect": Rect(center[0] + self.barreltip_dir[0]/1, center[1] + self.barreltip_dir[1]/1, 5, 3), "vel": vel, "dmg": self.stats.damage}
             self.shoottimer.start()
             self.ammo -= 1
             return ret
@@ -699,6 +740,11 @@ class Gun(Item):
             self.reloadtimer.start()
         if self.reloadtimer.just_ended:
             self.ammo = self.stats.ammo
+
+        # barrel position updaten.
+        angle_radians = math.radians(-self.angle)
+        direction = (math.cos(angle_radians) * self.stats.gun_length/2, math.sin(angle_radians) * self.stats.gun_length/2)
+        self.barreltip_dir = direction
 
         scroll = kwargs["scroll"]
         mPos = pygame.mouse.get_pos()
@@ -768,17 +814,13 @@ class ItemManager(Ecs.BaseSystem):  # bekommt entities, die items aufsammeln kö
 
                 if item_component.type.startswith("guns/"):
                     if pygame.mouse.get_pressed()[0] and item_component.shoottimer.ended:
-                        use_args = {"owner_transform": transform}
+                        use_args = {"owner_transform": transform, "transform": item_transform, "scroll": kwargs["scroll"]}
 
                         ret_item = item_component.use(**use_args)
                         if ret_item:
                             ret[(item, item_component.owner)] = ret_item
 
             if "debug_items" in kwargs:
-                try:
-                    print(item_component.ammo, item_component.reloadtimer.remaining(), item_component.stats)
-                except AttributeError:
-                    pass
                 color = kwargs["debug_items"]
                 scroll = kwargs["scroll"]
                 r = item_transform.rect.inflate(*Item.pickup_inflation)
@@ -789,7 +831,7 @@ class ItemManager(Ecs.BaseSystem):  # bekommt entities, die items aufsammeln kö
         return ret
 
 
-class ItemRenderer(Ecs.BaseSystem):
+class ItemRenderer(Ecs.ExtendedSystem):
     image_cache: dict[str, tuple[Surface, Rect]] = {}  # dict[str, tuple[rot_iamge, org_rect]]
 
     def __init__(self, game, screen: pygame.Surface) -> None:
@@ -797,30 +839,37 @@ class ItemRenderer(Ecs.BaseSystem):
         self.game = game
         self.screen = screen
 
-    def update_entity(self, entity: Entity, entity_components: dict[type[BaseComponent], BaseComponent], **kwargs) -> None:
-        transform: Transform = entity_components[Transform]
-        item: Item = entity_components[Item]
-
+    def update_entities(self, entites_data: dict[Entity, dict[type[BaseComponent], BaseComponent]], **kwargs) -> None:
+        fblits = []
         scroll = kwargs["scroll"]
+        viewport = Rect(scroll[0], scroll[1], *self.screen.get_size())
+        for entity, entity_components in entites_data.items():
+            transform: Transform = entity_components[Transform]
+            if not transform.rect.colliderect(viewport):
+                continue
 
-        key = f"{item.name}{bool(item.owner)};{item.angle}"
-        if key not in self.image_cache:
-            org_image: pygame.Surface = self.game.assets["items"][item.type]
-            if 270 >= item.angle >= 90:
-                org_image = pygame.transform.flip(org_image, False, True)
-            org_rect = org_image.get_frect()
-            rot_image = pygame.transform.rotate(org_image, item.angle)
+            item: Item = entity_components[Item]
 
-            self.image_cache[key] = (rot_image, org_rect)
+            item.angle = clamp_number_to_range_steps(-90, item.angle, 270, 360/48)
+            key = f"{item.name};{bool(item.owner)};{item.angle}"
+            if key not in self.image_cache:
+                org_image: pygame.Surface = self.game.assets["items"][item.type]
+                if 270 >= item.angle >= 90:
+                    org_image = pygame.transform.flip(org_image, False, True)
+                org_rect = org_image.get_frect()
+                rot_image = pygame.transform.rotate(org_image, item.angle)
 
-        img, org_rect = self.image_cache[key]
-        if item.owner:
-            rect = img.get_rect(center=self.component_manager.get_component(item.owner, Transform).rect.center)
-            transform.rect = FRect(transform.x - rect.w/4, transform.y - rect.h/4, rect.w, rect.h)
-        else:
-            rect = img.get_rect(center=transform.rect.center)
-            transform.rect = FRect(transform.x, transform.y, rect.w, rect.h)
-        self.screen.blit(img, (rect.x - scroll[0], rect.y - scroll[1]))
+                self.image_cache[key] = (rot_image, org_rect)
+
+            img, org_rect = self.image_cache[key]
+            if item.owner:
+                rect = img.get_rect(center=self.component_manager.get_component(item.owner, Transform).rect.center)
+                transform.rect = FRect(transform.x - rect.w/4, transform.y - rect.h/4, rect.w, rect.h)
+            else:
+                rect = img.get_rect(center=transform.rect.center)
+                transform.rect = FRect(transform.x, transform.y, rect.w, rect.h)
+            fblits.append((img, (rect.x - scroll[0], rect.y - scroll[1])))
+        self.screen.fblits(fblits)
 
 
 class ProjectileData(Ecs.BaseComponent):

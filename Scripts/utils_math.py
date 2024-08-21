@@ -7,6 +7,10 @@ def skalar(v1, v2):
     return sum(v1[i] * v2[i] for i in range(len(v1)))
 
 
+def magnitude(v):
+    return math.sqrt(v[0]**2 + v[1]**2)
+
+
 def normalize(x, y):
     n = x + y
     return (x / n, y / n)

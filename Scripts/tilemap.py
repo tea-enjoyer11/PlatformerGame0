@@ -90,42 +90,47 @@ class TileMap:
 
             self.grass_blades[f"{pos[0]};{pos[1]}"] = grass_patch
 
-    def update_grass(self, entity_rect: pygame.FRect, force_radius, force_dropoff, particle_method=None):
+    def update_grass(self, entity_rects: list[pygame.FRect], force_radius, force_dropoff, particle_method=None):
         # TODO
         # einzelne blades müssen zusammen gepackt werden, damit lookup times nicht durch die Decke gehen.
         # Am besten alle blades in einem Tile gruppieren.
         # Dann vllt auch die mögliche state vom tile cachen??
         layer = "0"
         patches = []
-        pos = entity_rect.center
-        tile_loc = (int(pos[0] // self.tile_size), int(pos[1] // self.tile_size))
-        for offset in NEIGHBOR_OFFSETS:
-            check_loc = str(tile_loc[0] + offset[0]) + ';' + str(tile_loc[1] + offset[1])
-            if check_loc in self.grass_blades:
-                patches.append(self.grass_blades[check_loc])
+        processed: set[tuple] = set()
+        for pos in [rect.center for rect in entity_rects]:
+            # pos = entity_rects[0].center
+            tile_loc = (int(pos[0] // self.tile_size), int(pos[1] // self.tile_size))
+            if tile_loc in processed:
+                continue
+            processed.add(tile_loc)
+            for offset in NEIGHBOR_OFFSETS:
+                check_loc = str(tile_loc[0] + offset[0]) + ';' + str(tile_loc[1] + offset[1])
+                if check_loc in self.grass_blades:
+                    patches.append(self.grass_blades[check_loc])
 
-        hit_blades = []
-        for patch in patches:
-            for blade in patch["blades"]:
-                org_rot = blade["angle"]
-                dis = dist(blade["pos"], pos)
-                if dis < force_radius:
-                    force = 2
-                else:
-                    dis = max(0, dis - force_radius)
-                    force = 1 - min(dis / force_dropoff, 1)
-                dir = -1 if pos[0] < blade["pos"][0] else 1
-                # dont update unless force is stronger
-                if blade["angle"] < force * 90:
-                    blade["angle"] = min(max(dir * force * 90 + org_rot * 0.5, -90), 90)
-                    clamp_number_to_range_steps(blade["angle"], -90, 90, 180/MAX_GRASS_STEPS)
-                    if dis < 5:
-                        hit_blades.append(blade)
+            hit_blades = []
+            for patch in patches:
+                for blade in patch["blades"]:
+                    org_rot = blade["angle"]
+                    dis = dist(blade["pos"], pos)
+                    if dis < force_radius:
+                        force = 2
+                    else:
+                        dis = max(0, dis - force_radius)
+                        force = 1 - min(dis / force_dropoff, 1)
+                    dir = -1 if pos[0] < blade["pos"][0] else 1
+                    # dont update unless force is stronger
+                    if abs(blade["angle"]) < force * 90:
+                        blade["angle"] = min(max(dir * force * 90 + org_rot * 0.5, -90), 90)
+                        clamp_number_to_range_steps(blade["angle"], -90, 90, 180/MAX_GRASS_STEPS)
+                        if dis < 5:
+                            hit_blades.append(blade)
 
-        if particle_method and hit_blades:
-            if random.random() * 100 > 99:
-                for blade in hit_blades:
-                    particle_method("leaf", pygame.Rect(*blade["pos"], 4, 4), (random.random()*100-50, -100))
+            if particle_method and hit_blades:
+                if random.random() * 100 > 99:
+                    for blade in hit_blades:
+                        particle_method("leaf", pygame.Rect(*blade["pos"], 4, 4), (random.random()*100-50, -100))
 
     def get_around(self, pos, ignore: set[str] = set()):
         layer = "0"

@@ -9,11 +9,33 @@ import math
 from Scripts.tilemap import TileMap
 from Scripts.CONFIG import *
 from Scripts.utils import load_image, draw_text, random_color, make_surface, load_images, pallete_swap_dir
-from Scripts.particles import ParticleGroup, ImageCache, CircleParticle, LeafParticle
+from Scripts.particles import ParticleGroup, ImageCache, CircleParticle, LeafParticle, Spark
 from Scripts.timer import TimerManager
 
-from Scripts.entities import Transform, Velocity, CollisionResolver, Animation, AnimationRenderer, Image, ImageRenderer, AnimationUpdater, EnemyPathFinderWalker, EnemyCollisionResolver, ParticleSystemRenderer, ParticleSystemUpdater, Item, ItemRenderer, Gun, ItemManager, Inventory, ItemPhysics, ProjectileData, ProjectileManager
+from Scripts.entities import (Transform,
+                              Velocity,
+                              CollisionResolver,
+                              Animation,
+                              AnimationRenderer,
+                              Image,
+                              ImageRenderer,
+                              AnimationUpdater,
+                              EnemyPathFinderWalker,
+                              EnemyCollisionResolver,
+                              ParticleSystemRenderer,
+                              ParticleSystemUpdater,
+                              Item,
+                              ItemRenderer,
+                              Gun,
+                              ItemManager,
+                              Inventory,
+                              ItemPhysics,
+                              ProjectileData,
+                              ProjectileManager,
+                              RemoveAfterTime)
+
 import Scripts.Ecs as Ecs
+
 
 os.environ['SDL_VIDEO_CENTERED'] = '1'
 
@@ -21,6 +43,8 @@ pygame.init()
 pygame.font.init()
 
 enemy_pos = (0, 0)
+
+PROJECTILE_DECAY_TIME = 4  # in s
 
 
 class Game:
@@ -97,6 +121,7 @@ class Game:
 
         self.enemies = []
         self.items = []
+        self.sparks: list[Spark] = []
 
         self.assets = {
             'decor': load_images('assets/tiles/decor'),
@@ -168,13 +193,14 @@ class Game:
                 self.enemies.append(enemy)
             if spawner["variant"] in [2, 3, 4, 5, 6]:
                 lt = {2: "guns/rifle", 3: "guns/pistol", 4: "guns/shotgun", 5: "guns/rocketlauncher", 6: "apple"}
+                ltn = {2: "rifle", 3: "pistol", 4: "shotgun", 5: "rocketlauncher", 6: "godapple"}
                 i = self.entity_manager.add_entity()
-                item_comp = Item(self, "godappel", "apple") if spawner["variant"] == 6 else Gun(self, "weapon", lt[spawner["variant"]])
+                item_comp = Item(self, lt[spawner["variant"]], "apple") if spawner["variant"] == 6 else Gun(self, lt[spawner["variant"]], lt[spawner["variant"]])
                 self.component_manager.add_component(i, [Transform(*spawner["pos"], 4, 6),
                                                          item_comp,
                                                          Velocity(-20, -200)])
-                self.system_manager.add_system(i, self.item_renderer)
-                self.system_manager.add_system(i, self.item_physics)
+                self.system_manager.add_extended_system(i, self.item_renderer)
+                self.system_manager.add_extended_system(i, self.item_physics)
                 self.items.append(i)
 
     def add_particle(self, type: str, rect, vel):
@@ -223,7 +249,8 @@ class Game:
             def rot_function(x) -> int: return int(math.sin(master_time / 60 + x / 100) * 15)
             # def rot_function(x): return 1
             self.tile_map.rotate_grass(rot_function=rot_function)
-            self.tile_map.update_grass(p_transform.rect, 1, 12, particle_method=self.add_particle)
+            all_entity_rects = [p_transform.frect] + [self.component_manager.get_component(en, Transform).frect for en in self.enemies + self.items]
+            self.tile_map.update_grass(all_entity_rects, 1, 12, particle_method=self.add_particle)
 
             if right:
                 self.player_movement[0] = 1
@@ -259,8 +286,8 @@ class Game:
                 "player_entity": self.p,
                 "drop_through": drop_trough,
                 # "debug_animation": (255,0,0),
-                # "debug_tiles": (255, 255, 0),
-                "debug_pathfinder": (255, 0, 255),
+                "debug_tiles": (255, 255, 0),
+                # "debug_pathfinder": (255, 0, 255),
                 # "debug_items": (0, 255, 255),
                 # "debug_projectiles": (255, 0, 255),
                 "surface": screen,  # eig. nicht gut das so zu machen oder etwa doch ??
@@ -283,19 +310,40 @@ class Game:
                         self.component_manager.add_component(proj, [Transform(r.x, r.y, r.w, r.h),
                                                                     Velocity(*stats["vel"]),
                                                                     ProjectileData(stats["dmg"], ens[1]),
-                                                                    Image(self.assets["items"]["guns/projectile"], angle=stats["angle"])])
+                                                                    Image(self.assets["items"]["guns/projectile"], angle=stats["angle"]),
+                                                                    RemoveAfterTime(PROJECTILE_DECAY_TIME)])
                         self.system_manager.add_system(proj, projectile_manager)
                         self.system_manager.add_system(proj, image_renderer)
                         projectiles.append(proj)
 
-            # if (tiles := systems_ret[CollisionResolver][self.collision_resolver_sys][self.p]["coll_tiles"]):
-            #     c1 = (0, 0, 255)
-            #     c2 = (0, 255, 255)
-            #     for tile in tiles:
-            #         c = c2
-            #         if tile["type"] == "decor":
-            #             c = c1
-            #         pygame.draw.rect(screen, c, Rect(tile["pos"][0] * 16 - self.scroll[0], tile["pos"][1] * 16 - self.scroll[1], 16, 16), width=0)
+                        # sparks
+                        for i in range(4):
+                            self.sparks.append(
+                                Spark(
+                                    (r.x, r.y),
+                                    random.random() - 0.5 + (math.pi if stats["vel"][1] > 0 else 0),
+                                    3 + random.random()
+                                )
+                            )
+            for proj in projectiles.copy():
+                transform = self.component_manager.get_component(proj, Transform)
+                removeaftertime = self.component_manager.get_component(proj, RemoveAfterTime)
+                if self.tile_map.solid_check(transform.pos):
+                    velocity = self.component_manager.get_component(proj, Velocity)
+                    projectiles.remove(proj)
+                    self.entity_manager.remove_entity(proj)
+                    for i in range(4):
+                        self.sparks.append(
+                            Spark(
+                                (transform.x, transform.y),
+                                random.random() - 0.5 + (math.pi if velocity.y > 0 else 0),
+                                3 + random.random()
+                            )
+                        )
+                else:
+                    if removeaftertime.timer.ended:
+                        projectiles.remove(proj)
+                        self.entity_manager.remove_entity(proj)
 
             # region Events
             keys = pygame.key.get_pressed()
@@ -428,6 +476,11 @@ class Game:
             self.particle_group.update(dt)
             self.particle_group.draw(screen, blend=pygame.BLEND_RGB_ADD)
 
+            for spark in self.sparks.copy():
+                spark.render(screen, self.scroll)
+                if spark.update(dt):
+                    self.sparks.remove(spark)
+
             self.pygame_gui_manager.update(dt)
 
             master_screen.blit(pygame.transform.scale(screen, RES), (0, 0))
@@ -436,7 +489,7 @@ class Game:
             draw_text(master_screen, f"DT: {dt:.6f} DT multiplier:{self.dt_multiplicator:.4f}", (0, 80), outline_color=outline_color)
             draw_text(master_screen, f"{mainClock.get_fps():.0f}", (500, 0), outline_color=outline_color)
             draw_text(master_screen, f"{self.player_movement[0]:.2f}, {self.player_movement[1]:.2f}, {p_velocity.xy}", (0, 200), outline_color=outline_color)
-            draw_text(master_screen, f"TILEPOS: {p_transform.pos // TILESIZE}\nPOS:{p_transform.pos}\nNOCLIP: {self.noclip}", (500, 50), outline_color=outline_color)
+            draw_text(master_screen, f"TILEPOS: {p_transform.tile_pos()}\nPOS:{p_transform.pos}\nNOCLIP: {self.noclip}", (500, 50), outline_color=outline_color)
             draw_text(master_screen, f"PARTICLES:\nAmount of Particles: {len(self.particle_group)}", (500, 250), outline_color=outline_color)
             draw_text(master_screen, f"Anim state: {p_anim.state}", (0, 0,), outline_color=outline_color)
 
