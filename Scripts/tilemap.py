@@ -123,7 +123,7 @@ class TileMap:
                     # dont update unless force is stronger
                     if abs(blade["angle"]) < force * 90:
                         blade["angle"] = min(max(dir * force * 90 + org_rot * 0.5, -90), 90)
-                        clamp_number_to_range_steps(blade["angle"], -90, 90, 180/MAX_GRASS_STEPS)
+                        blade["angle"] = clamp_number_to_range_steps(blade["angle"], -90, 90, 180/MAX_GRASS_STEPS)
                         if dis < 5:
                             hit_blades.append(blade)
 
@@ -244,10 +244,11 @@ def make_rot(game, variant, angle, b_pos) -> tuple[pygame.Surface, pygame.FRect]
     rot_image = make_rot_image(game, variant, angle)
     rot_rect = rot_image.get_frect(center=org_rect.center)
 
+    print(make_rot_image.cache_info())
     return (rot_image, rot_rect)
 
 
-@functools.lru_cache(maxsize=8192)
+@functools.lru_cache(maxsize=256)
 def make_rot_image(game, variant, angle) -> pygame.Surface:
     org_image: pygame.Surface = game.assets["grass_blades"][variant]
     rot_image = pygame.transform.rotate(org_image, angle)
