@@ -32,7 +32,8 @@ from Scripts.entities import (Transform,
                               ItemPhysics,
                               ProjectileData,
                               ProjectileManager,
-                              RemoveAfterTime)
+                              RemoveAfterTime,
+                              InvetoryRenderer)
 
 import Scripts.Ecs as Ecs
 
@@ -169,6 +170,8 @@ class Game:
         self.item_physics = ItemPhysics()
         self.item_manager = ItemManager()
         self.item_renderer = ItemRenderer(self, screen)
+        self.inventory_renderer = InvetoryRenderer(self, screen)
+        self.system_manager.add_system(self.p, self.inventory_renderer)
 
         self.system_manager.add_system(self.p, self.item_manager)
 
@@ -176,7 +179,7 @@ class Game:
 
     def parsemap(self):
         for spawner in self.tile_map.extract([('spawners', 0), ('spawners', 1), ("spawners", 2), ("spawners", 3), ("spawners", 4), ("spawners", 5), ("spawners", 6)], keep=False):
-            print(spawner)
+            # print(spawner)
             if spawner["variant"] == 0:
                 self.component_manager.get_component(self.p, Transform).pos = spawner["pos"]
             if spawner["variant"] == 1:

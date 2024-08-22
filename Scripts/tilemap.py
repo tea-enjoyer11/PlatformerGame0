@@ -132,16 +132,30 @@ class TileMap:
                     for blade in hit_blades:
                         particle_method("leaf", pygame.Rect(*blade["pos"], 4, 4), (random.random()*100-50, -100))
 
-    def get_around(self, pos, ignore: set[str] = set()):
+    def caculate_tile_span(self, size: int):
+        if size <= self.tile_size:
+            return 0
+        return (size + self.tile_size - 1) // self.tile_size - 1
+
+    def get_around(self, pos, size=(16, 16), ignore: set[str] = set()):
         layer = "0"
         tiles = []
-        tile_loc = (int(pos[0] // self.tile_size), int(pos[1] // self.tile_size))
-        for offset in NEIGHBOR_OFFSETS:
-            check_loc = str(tile_loc[0] + offset[0]) + ';' + str(tile_loc[1] + offset[1])
-            if check_loc in self.tilemap[layer]:
-                t = self.tilemap[layer][check_loc]
-                if t["type"] not in ignore:
-                    tiles.append(t)
+        topleft_tile = (
+            int(pos[0] // self.tile_size),
+            int(pos[1] // self.tile_size)
+        )
+        bottomright_tile = (
+            int(pos[0] // self.tile_size) + self.caculate_tile_span(size[0]),
+            int(pos[1] // self.tile_size) + self.caculate_tile_span(size[1])
+        )
+        for x in range(topleft_tile[0], bottomright_tile[0]+1):
+            for y in range(topleft_tile[1], bottomright_tile[1]+1):
+                for offset in NEIGHBOR_OFFSETS:
+                    check_loc = str(x + offset[0]) + ';' + str(y + offset[1])
+                    if check_loc in self.tilemap[layer]:
+                        t = self.tilemap[layer][check_loc]
+                        if t["type"] not in ignore and t not in tiles:
+                            tiles.append(t)
         return tiles
 
     def get_tile(self, pos, convert_to_tilespace=False):
@@ -175,10 +189,10 @@ class TileMap:
             if self.tilemap[layer][tile_loc]['type'] in PHYSICS_TILES:
                 return self.tilemap[layer][tile_loc]
 
-    def physics_rects_around(self, pos):
+    def physics_rects_around(self, pos, size=(16, 16)):
         rects = []
         # r = []
-        for tile in self.get_around(pos):
+        for tile in self.get_around(pos, size=size):
             if tile["type"] in PHYSICS_TILES:
                 rects.append(pygame.FRect(tile['pos'][0] * self.tile_size, tile['pos'][1] * self.tile_size, self.tile_size, self.tile_size))
                 # r.append(tile)
@@ -244,11 +258,10 @@ def make_rot(game, variant, angle, b_pos) -> tuple[pygame.Surface, pygame.FRect]
     rot_image = make_rot_image(game, variant, angle)
     rot_rect = rot_image.get_frect(center=org_rect.center)
 
-    print(make_rot_image.cache_info())
     return (rot_image, rot_rect)
 
 
-@functools.lru_cache(maxsize=256)
+@ functools.lru_cache(maxsize=256)
 def make_rot_image(game, variant, angle) -> pygame.Surface:
     org_image: pygame.Surface = game.assets["grass_blades"][variant]
     rot_image = pygame.transform.rotate(org_image, angle)

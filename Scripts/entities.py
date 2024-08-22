@@ -111,6 +111,15 @@ class Transform(Ecs.BaseComponent):
         self.w = pos[0]
         self.h = pos[1]
 
+    @property
+    def size_int(self) -> Tuple[int, int]:
+        return int(self.w), int(self.h)
+
+    @size_int.setter
+    def size_int(self, pos: Tuple) -> None:
+        self.w = int(pos[0])
+        self.h = int(pos[1])
+
 
 class Velocity(Ecs.BaseComponent, Vector2):
     def __init__(self, x: int | float, y: int | float) -> None:
@@ -290,51 +299,52 @@ class CollisionResolver(Ecs.BaseSystem):
         frame_movement = (movement[0] * velocity[0] * dt, 1 * velocity[1] * dt)
 
         collided_with_fall_trough = False
-        transform.x += frame_movement[0]
-        entity_rect = transform.frect
-        for rect, tile in zip(tilemap.physics_rects_around(transform.pos), tilemap.get_around(transform.pos, ignore={"decor"})):
-            if entity_rect.colliderect(rect):
-                return_data["coll_tiles"].append(tile)
-                if tile["type"] in FALLTRHOGH_TILES:  # wenn spieler nicht mehr mit fallthrough collided, dann kann man aus machen.
-                    collided_with_fall_trough = True
-                if frame_movement[0] > 0:  # right
-                    if tile["type"] in FALLTRHOGH_TILES:
-                        # transform.falling_through = True
-                        pass
-                    else:
-                        entity_rect.right = rect.left
-                        collisions['right'] = True
-                if frame_movement[0] < 0:  # left
-                    if tile["type"] in FALLTRHOGH_TILES:
-                        # transform.falling_through = True
-                        pass
-                    else:
-                        entity_rect.left = rect.right
-                        collisions['left'] = True
-                transform.x = entity_rect.x
-                break  # TODO sich vergewissern, dass das nicht das Ding zerstört.
-
-        transform.y += frame_movement[1]
-        entity_rect = transform.frect
-        for rect, tile in zip(tilemap.physics_rects_around(transform.pos), tilemap.get_around(transform.pos, ignore={"decor"})):
-            if entity_rect.colliderect(rect):
-                return_data["coll_tiles"].append(tile)
-                if tile["type"] in FALLTRHOGH_TILES:  # wenn spieler nicht mehr mit fallthrough collided, dann kann man aus machen.
-                    collided_with_fall_trough = True
-                if frame_movement[1] > 0:  # downards
-                    if tile["type"] in FALLTRHOGH_TILES and transform.falling_through or (tile["type"] in FALLTRHOGH_TILES and (rect.y - rect.h / 2) - transform.pos[1] < 1):  # durch droppen mit key input
-                        pass
-                    else:
-                        entity_rect.bottom = rect.top
-                        collisions['down'] = True
-                if frame_movement[1] < 0:  # upwards
-                    if tile["type"] in FALLTRHOGH_TILES:
-                        pass
-                    else:
-                        entity_rect.top = rect.bottom
-                        collisions['up'] = True
-                transform.y = entity_rect.y
-                break  # TODO sich vergewissern, dass das nicht das Ding zerstört.
+        if frame_movement[0]:
+            transform.x += frame_movement[0]
+            entity_rect = transform.frect
+            for rect, tile in zip(tilemap.physics_rects_around(transform.pos), tilemap.get_around(transform.pos, ignore={"decor"})):
+                if entity_rect.colliderect(rect):
+                    return_data["coll_tiles"].append(tile)
+                    if tile["type"] in FALLTRHOGH_TILES:  # wenn spieler nicht mehr mit fallthrough collided, dann kann man aus machen.
+                        collided_with_fall_trough = True
+                    if frame_movement[0] > 0:  # right
+                        if tile["type"] in FALLTRHOGH_TILES:
+                            # transform.falling_through = True
+                            pass
+                        else:
+                            entity_rect.right = rect.left
+                            collisions['right'] = True
+                    if frame_movement[0] < 0:  # left
+                        if tile["type"] in FALLTRHOGH_TILES:
+                            # transform.falling_through = True
+                            pass
+                        else:
+                            entity_rect.left = rect.right
+                            collisions['left'] = True
+                    transform.x = entity_rect.x
+                    break  # TODO sich vergewissern, dass das nicht das Ding zerstört.
+        if frame_movement[1]:
+            transform.y += frame_movement[1]
+            entity_rect = transform.frect
+            for rect, tile in zip(tilemap.physics_rects_around(transform.pos), tilemap.get_around(transform.pos, ignore={"decor"})):
+                if entity_rect.colliderect(rect):
+                    return_data["coll_tiles"].append(tile)
+                    if tile["type"] in FALLTRHOGH_TILES:  # wenn spieler nicht mehr mit fallthrough collided, dann kann man aus machen.
+                        collided_with_fall_trough = True
+                    if frame_movement[1] > 0:  # downards
+                        if tile["type"] in FALLTRHOGH_TILES and transform.falling_through or (tile["type"] in FALLTRHOGH_TILES and (rect.y - rect.h / 2) - transform.pos[1] < 1):  # durch droppen mit key input
+                            pass
+                        else:
+                            entity_rect.bottom = rect.top
+                            collisions['down'] = True
+                    if frame_movement[1] < 0:  # upwards
+                        if tile["type"] in FALLTRHOGH_TILES:
+                            pass
+                        else:
+                            entity_rect.top = rect.bottom
+                            collisions['up'] = True
+                    transform.y = entity_rect.y
+                    break  # TODO sich vergewissern, dass das nicht das Ding zerstört.
 
         # resetting fallthrough
         if not collided_with_fall_trough:
@@ -375,45 +385,46 @@ class EnemyCollisionResolver(Ecs.BaseSystem):
 
         frame_movement = (bool(velocity.x) * velocity[0] * dt, 1 * velocity[1] * dt)
 
-        transform.x += frame_movement[0]
-        entity_rect = transform.frect
-        for rect, tile in zip(tilemap.physics_rects_around(transform.pos), tilemap.get_around(transform.pos)):
-            if entity_rect.colliderect(rect):
-                return_data["coll_tiles"].append(tile)
-                if frame_movement[0] > 0:  # right
-                    if tile["type"] in FALLTRHOGH_TILES:
-                        # transform.falling_through = True
-                        pass
-                    else:
-                        entity_rect.right = rect.left
-                        collisions['right'] = True
-                if frame_movement[0] < 0:  # left
-                    if tile["type"] in FALLTRHOGH_TILES:
-                        # transform.falling_through = True
-                        pass
-                    else:
-                        entity_rect.left = rect.right
-                        collisions['left'] = True
-                transform.x = entity_rect.x
-
-        transform.y += frame_movement[1]
-        entity_rect = transform.frect
-        for rect, tile in zip(tilemap.physics_rects_around(transform.pos), tilemap.get_around(transform.pos)):
-            if entity_rect.colliderect(rect):
-                return_data["coll_tiles"].append(tile)
-                if frame_movement[1] > 0:  # downards
-                    if tile["type"] in FALLTRHOGH_TILES and transform.falling_through or (tile["type"] in FALLTRHOGH_TILES and (rect.y - rect.h / 2) - transform.pos[1] < 1):  # durch droppen mit key input
-                        pass
-                    else:
-                        entity_rect.bottom = rect.top
-                        collisions['down'] = True
-                if frame_movement[1] < 0:  # upwards
-                    if tile["type"] in FALLTRHOGH_TILES:
-                        pass
-                    else:
-                        entity_rect.top = rect.bottom
-                        collisions['up'] = True
-                transform.y = entity_rect.y
+        if frame_movement[0]:
+            transform.x += frame_movement[0]
+            entity_rect = transform.frect
+            for rect, tile in zip(tilemap.physics_rects_around(transform.pos), tilemap.get_around(transform.pos)):
+                if entity_rect.colliderect(rect):
+                    return_data["coll_tiles"].append(tile)
+                    if frame_movement[0] > 0:  # right
+                        if tile["type"] in FALLTRHOGH_TILES:
+                            # transform.falling_through = True
+                            pass
+                        else:
+                            entity_rect.right = rect.left
+                            collisions['right'] = True
+                    if frame_movement[0] < 0:  # left
+                        if tile["type"] in FALLTRHOGH_TILES:
+                            # transform.falling_through = True
+                            pass
+                        else:
+                            entity_rect.left = rect.right
+                            collisions['left'] = True
+                    transform.x = entity_rect.x
+        if frame_movement[1]:
+            transform.y += frame_movement[1]
+            entity_rect = transform.frect
+            for rect, tile in zip(tilemap.physics_rects_around(transform.pos), tilemap.get_around(transform.pos)):
+                if entity_rect.colliderect(rect):
+                    return_data["coll_tiles"].append(tile)
+                    if frame_movement[1] > 0:  # downards
+                        if tile["type"] in FALLTRHOGH_TILES and transform.falling_through or (tile["type"] in FALLTRHOGH_TILES and (rect.y - rect.h / 2) - transform.pos[1] < 1):  # durch droppen mit key input
+                            pass
+                        else:
+                            entity_rect.bottom = rect.top
+                            collisions['down'] = True
+                    if frame_movement[1] < 0:  # upwards
+                        if tile["type"] in FALLTRHOGH_TILES:
+                            pass
+                        else:
+                            entity_rect.top = rect.bottom
+                            collisions['up'] = True
+                    transform.y = entity_rect.y
 
         velocity[1] = min(max_gravity, velocity[1] + gravity)
 
@@ -563,72 +574,78 @@ class ItemPhysics(Ecs.ExtendedSystem):
         gravity = kwargs["gravity"]
         max_gravity = kwargs["max_gravity"]
         scroll = kwargs["scroll"]
-        friction = 0.3
+        friction = 0.2
 
         entity_map = collections.defaultdict(list)  # https://docs.python.org/3/library/collections.html#collections.defaultdict
         for entity, entity_components in entites_data.items():
             transform: Transform = entity_components[Transform]
             tp = transform.tile_pos()
-            entity_map[(tp[0] * 16, tp[1] * 16)].append((entity, entity_components))
+            tp = (tp[0] * 16, tp[1] * 16)
+            size = transform.size_int
+            print(size, type(size[0]), type(size[1]))
+            entity_map[(tp, size)].append((entity, entity_components))
 
-        for tile_pos, entity_group in entity_map.items():
-            nearby_rects = tilemap.physics_rects_around(tile_pos)
-            nearby_tiles = tilemap.get_around(tile_pos, ignore={"decor"})
+        for (tile_pos, group_size), entity_group in entity_map.items():
+            nearby_rects = tilemap.physics_rects_around(tile_pos, size=group_size)
+            nearby_tiles = tilemap.get_around(tile_pos, size=group_size, ignore={"decor"})
 
             for entity, entity_components in entity_group:
+                item_component: Item = entity_components[Item]
+                if item_component.ignore_physics:
+                    continue
+
                 velocity: Velocity = entity_components[Velocity]
                 transform: Transform = entity_components[Transform]
-                item_component: Item = entity_components[Item]
-
-                if item_component.ignore_physics:
-                    continue  # return
 
                 frame_movement = (velocity.x * dt, velocity.y * dt)
-
                 collisions = {'up': False, 'down': False, 'right': False, 'left': False}
 
-                transform.x += frame_movement[0]
                 if frame_movement[0]:
-                    entity_rect = transform.frect
-                    for rect, tile in zip(nearby_rects, nearby_tiles):
-                        if entity_rect.colliderect(rect):
-                            if frame_movement[0] > 0:  # right
-                                entity_rect.right = rect.left
-                                collisions['right'] = True
-                            if frame_movement[0] < 0:  # left
-                                entity_rect.left = rect.right
-                                collisions['left'] = True
-                            transform.x = entity_rect.x
-                            break  # TODO sich vergewissern, dass das nicht das Ding zerstört.
-                transform.y += frame_movement[1]
+                    transform.x += frame_movement[0]
+                    if frame_movement[0]:
+                        entity_rect = transform.frect
+                        for rect, tile in zip(nearby_rects, nearby_tiles):
+                            if entity_rect.colliderect(rect):
+                                if frame_movement[0] > 0:  # right
+                                    entity_rect.right = rect.left
+                                    collisions['right'] = True
+                                if frame_movement[0] < 0:  # left
+                                    entity_rect.left = rect.right
+                                    collisions['left'] = True
+                                transform.x = entity_rect.x
+                                break  # TODO sich vergewissern, dass das nicht das Ding zerstört.
                 if frame_movement[1]:
-                    entity_rect = transform.frect
-                    for rect, tile in zip(nearby_rects, nearby_tiles):
-                        if entity_rect.colliderect(rect):
-                            if frame_movement[1] > 0:  # downards
-                                entity_rect.bottom = rect.top
-                                collisions['down'] = True
-                            if frame_movement[1] < 0:  # upwards
-                                entity_rect.top = rect.bottom
-                                collisions['up'] = True
-                            transform.y = entity_rect.y
-                            break  # TODO sich vergewissern, dass das nicht das Ding zerstört.
+                    transform.y += frame_movement[1]
+                    if frame_movement[1]:
+                        entity_rect = transform.frect
+                        for rect, tile in zip(nearby_rects, nearby_tiles):
+                            if entity_rect.colliderect(rect):
+                                if frame_movement[1] > 0:  # downards
+                                    entity_rect.bottom = rect.top
+                                    collisions['down'] = True
+                                if frame_movement[1] < 0:  # upwards
+                                    entity_rect.top = rect.bottom
+                                    collisions['up'] = True
+                                transform.y = entity_rect.y
+                                break  # TODO sich vergewissern, dass das nicht das Ding zerstört.
 
                 velocity[1] = min(max_gravity/1, velocity[1] + gravity)
 
                 if collisions['down'] or collisions['up']:
                     velocity.y *= -friction
                     velocity.x *= friction
-                if abs(velocity.y) <= 3:
+                if abs(velocity.y) <= 4:
                     velocity.y = 0
 
                 if collisions['right'] or collisions['left']:
                     velocity.x *= -friction
-                if abs(velocity.x) <= 3:
+                if abs(velocity.x) <= 4:
                     velocity.x = 0
 
             if "debug_tiles" in kwargs:
-                debug_tiles |= {tuple(r) for r in tilemap.physics_rects_around(transform.pos)}
+                # Kann sein das selbst aufgehobene Items trotzdem hier angezeigt werden,
+                # da sie gruppiert sind und das hier läuft nicht pro Item sondern pro Gruppe.
+                debug_tiles |= {tuple(r) for r in tilemap.physics_rects_around(transform.pos, size=group_size)}
 
         if "debug_tiles" in kwargs:
             color = kwargs["debug_tiles"]
@@ -770,6 +787,8 @@ class Inventory(Ecs.BaseComponent):
     def remove(self, item: Ecs.BaseComponent):
         self.inv.remove(item)
 
+    def __iter__(self): return iter(self.inv)
+
 
 class ItemManager(Ecs.BaseSystem):  # bekommt entities, die items aufsammeln können (player)
     def __init__(self) -> None:
@@ -870,6 +889,27 @@ class ItemRenderer(Ecs.ExtendedSystem):
                 transform.rect = FRect(transform.x, transform.y, rect.w, rect.h)
             fblits.append((img, (rect.x - scroll[0], rect.y - scroll[1])))
         self.screen.fblits(fblits)
+
+
+class InvetoryRenderer(Ecs.BaseSystem):
+    def __init__(self, game, screen: pygame.Surface) -> None:
+        super().__init__([Inventory])
+        self.game = game
+        self.screen = screen
+
+    def update_entity(self, entity: Entity, entity_components: dict[type[BaseComponent], BaseComponent], **kwargs) -> None:
+        inventory = entity_components[Inventory]
+
+        for item_id in iter(inventory):
+            item = self.component_manager.get_component(item_id, Item)
+
+            match item:  # k.a. warum aber ist interessant → https://peps.python.org/pep-0622/
+                case Gun():
+                    # print("gun", item.__dict__)
+                    pass
+                case Item():
+                    # print("item", item.__dict__)
+                    pass
 
 
 class ProjectileData(Ecs.BaseComponent):
