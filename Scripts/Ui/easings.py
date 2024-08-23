@@ -128,7 +128,7 @@ def ease_in_out_quint(x: float) -> float:
     if x < 0.5:
         return 16 * x * x * x * x * x
     else:
-        1 - pow(-2 * x + 2, 5) / 2
+        return 1 - pow(-2 * x + 2, 5) / 2
 
 
 def ease_in_expo(x: float) -> float:
@@ -232,7 +232,7 @@ def ease_in_out_back(x: float) -> float:
     if x < 0.5:
         return (pow(2 * x, 2) * ((c2 + 1) * 2 * x - c2)) / 2
     else:
-        (pow(2 * x - 2, 2) * ((c2 + 1) * (x * 2 - 2) + c2) + 2) / 2
+        return (pow(2 * x - 2, 2) * ((c2 + 1) * (x * 2 - 2) + c2) + 2) / 2
 
 
 c4 = (2 * pi) / 3
@@ -293,7 +293,7 @@ def ease_in_out_elastic(x: float) -> float:
     elif x < 0.5:
         return -(pow(2, 20 * x - 10) * sin((20 * x - 11.125) * c5)) / 2
     else:
-        (pow(2, -20 * x + 10) * sin((20 * x - 11.125) * c5)) / 2 + 1
+        return (pow(2, -20 * x + 10) * sin((20 * x - 11.125) * c5)) / 2 + 1
 
 
 def ease_in_bounce(x: float) -> float:
@@ -343,3 +343,4 @@ def ease_in_out_bounce(x: float) -> float:
         return (1 - ease_out_bounce(1 - 2 * x)) / 2
     else:
         return (1 + ease_out_bounce(2 * x - 1)) / 2
+

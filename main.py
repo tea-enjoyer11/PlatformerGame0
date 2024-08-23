@@ -40,6 +40,7 @@ import Scripts.Ecs as Ecs
 
 os.environ['SDL_VIDEO_CENTERED'] = '1'
 
+
 pygame.init()
 pygame.font.init()
 
@@ -170,11 +171,11 @@ class Game:
         self.item_physics = ItemPhysics()
         self.item_manager = ItemManager()
         self.item_renderer = ItemRenderer(self, screen)
-        self.inventory_renderer = InvetoryRenderer(self, screen)
+        self.inventory_renderer = InvetoryRenderer(self, screen, pygame.font.SysFont("arial", 14))
         self.system_manager.add_system(self.p, self.inventory_renderer)
 
         self.system_manager.add_system(self.p, self.item_manager)
-
+        self.system_manager.add_system(self.p, self.inventory_renderer)
         self.parsemap()
 
     def parsemap(self):
@@ -185,7 +186,7 @@ class Game:
             if spawner["variant"] == 1:
                 enemy = self.entity_manager.add_entity()
                 self.component_manager.add_component(enemy, [
-                    Transform(*spawner["pos"], 7, 11),
+                    Transform(*spawner["pos"], 7, 11), # type: ignore
                     Animation("assets/entities/enemies/walker/config.json"),
                     Velocity(15, 0),
                 ])
@@ -289,7 +290,7 @@ class Game:
                 "player_entity": self.p,
                 "drop_through": drop_trough,
                 # "debug_animation": (255,0,0),
-                "debug_tiles": (255, 255, 0),
+                # "debug_tiles": (255, 255, 0),
                 # "debug_pathfinder": (255, 0, 255),
                 # "debug_items": (0, 255, 255),
                 # "debug_projectiles": (255, 0, 255),

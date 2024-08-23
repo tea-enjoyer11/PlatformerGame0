@@ -582,7 +582,6 @@ class ItemPhysics(Ecs.ExtendedSystem):
             tp = transform.tile_pos()
             tp = (tp[0] * 16, tp[1] * 16)
             size = transform.size_int
-            print(size, type(size[0]), type(size[1]))
             entity_map[(tp, size)].append((entity, entity_components))
 
         for (tile_pos, group_size), entity_group in entity_map.items():
@@ -892,25 +891,35 @@ class ItemRenderer(Ecs.ExtendedSystem):
 
 
 class InvetoryRenderer(Ecs.BaseSystem):
-    def __init__(self, game, screen: pygame.Surface) -> None:
+    def __init__(self, game, screen: pygame.Surface, font: pygame.font.Font) -> None:
         super().__init__([Inventory])
         self.game = game
         self.screen = screen
+        self.font = font
 
     def update_entity(self, entity: Entity, entity_components: dict[type[BaseComponent], BaseComponent], **kwargs) -> None:
         inventory = entity_components[Inventory]
 
-        for item_id in iter(inventory):
+        for item_id in iter(inventory): # type: ignore
             item = self.component_manager.get_component(item_id, Item)
 
+            item_name = item.name
             match item:  # k.a. warum aber ist interessant → https://peps.python.org/pep-0622/
                 case Gun():
                     # print("gun", item.__dict__)
-                    pass
+                    stats = item.stats
+                    data = f"{item.ammo}/{stats.ammo}"
                 case Item():
                     # print("item", item.__dict__)
-                    pass
+                    data = ""
+            
+            name_surf = self.font.render(item_name, False, (255,255,255))
+            data_surf = self.font.render(data, False,  (255,255,255))
 
+            x = DOWNSCALED_RES.x
+            y = DOWNSCALED_RES.y
+            self.screen.blit(name_surf, (x-name_surf.get_width(), y-data_surf.get_height()-name_surf.get_height()))
+            self.screen.blit(data_surf, (x-data_surf.get_width(), y-data_surf.get_height()))
 
 class ProjectileData(Ecs.BaseComponent):
     def __init__(self, dmg, owner: Ecs.Entity) -> None:
@@ -947,7 +956,7 @@ class ParticleSystemUpdater(Ecs.ExtendedSystem):
     def __init__(self) -> None:
         super().__init__([Transform, Velocity, Animation])
 
-    def update_entities(self, entites_data: dict[Entity, dict[type[BaseComponent], BaseComponent]], **kwargs) -> None:
+    def update_entities(self, entites_data: dict[Entity, dict[type[BaseComponent], BaseComponent]], **kwargs) -> list[Ecs.Entity]:
         to_remove: List[Ecs.Entity] = []
         for entity, entity_components in entites_data.items():
             velocity: Velocity = entity_components[Velocity]
